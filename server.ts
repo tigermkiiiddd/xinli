@@ -71,11 +71,20 @@ async function startServer() {
 4. 如果评估到用户可能存在严重的精神危机或有自残/自杀倾向，请务必建议他们寻求专业的现场医疗帮助或拨打危机援助热线。` + profileContext
       };
 
+      let effectiveProvider = provider;
+      const openaiApiKey = settings?.openaiApiKey || process.env.OPENAI_API_KEY;
+      const geminiApiKey = settings?.geminiApiKey || process.env.GEMINI_API_KEY;
+
+      // 如果选了 OpenAI 但是没有配 Key，且环境里有 Gemini Key，则自动降级到 Gemini
+      if (effectiveProvider === 'openai' && !openaiApiKey && geminiApiKey) {
+        effectiveProvider = 'gemini';
+      }
+
       let replyContent = '';
 
-      if (provider === 'gemini') {
+      if (effectiveProvider === 'gemini') {
         const { GoogleGenAI } = await import('@google/genai');
-        const apiKey = settings?.geminiApiKey || process.env.GEMINI_API_KEY;
+        const apiKey = geminiApiKey;
         if (!apiKey) {
             return res.status(400).json({ error: 'GEMINI_API_KEY is not configured. Please set the API key in the settings.' });
         }
@@ -120,7 +129,7 @@ async function startServer() {
         }
 
       } else {
-        const apiKey = settings?.openaiApiKey || process.env.OPENAI_API_KEY;
+        const apiKey = openaiApiKey;
         const baseURL = settings?.openaiBaseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
         const modelName = settings?.openaiModel || process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
 
