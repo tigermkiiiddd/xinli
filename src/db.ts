@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 
 export interface UserProfile {
   id: number; // Always 1
+  nickname?: string;
   age?: number | '';
   occupation?: string;
   emotional_state?: string;
@@ -16,6 +17,7 @@ export interface AppSettings {
   openaiBaseUrl?: string;
   openaiModel?: string;
   geminiApiKey?: string;
+  geminiModel?: string;
   userAvatar?: string;
   assistantAvatar?: string;
   chatBackgroundMode?: 'default' | 'color' | 'image';

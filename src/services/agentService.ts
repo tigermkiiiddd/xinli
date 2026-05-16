@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db, type Message, type MemoryEntry, type AppSettings, type UserProfile, type Chat } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -49,107 +49,129 @@ export class AgentService {
       const openai = new OpenAI({
         apiKey: this.settings.openaiApiKey,
         baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
-        dangerouslyAllowBrowser: true
+        dangerouslyAllowBrowser: true // Client-side warning
       });
+      
+      const fullMessages = [...messages];
+      const systemInstruction = messages.find(m => m.role === 'system')?.content;
+      const pureMessages = messages.filter(m => m.role !== 'system');
+      
+      if (systemInstruction) {
+        pureMessages.unshift({ role: 'system', content: systemInstruction });
+      }
+
       const response = await openai.chat.completions.create({
         model: this.settings.openaiModel || 'gpt-3.5-turbo',
-        messages,
+        messages: pureMessages,
         temperature,
       });
       return response.choices[0].message.content || '';
     } else {
-      const ai = new GoogleGenAI({ 
-        apiKey: this.settings.geminiApiKey || '',
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
+      const genAI = new GoogleGenerativeAI(this.settings.geminiApiKey || '');
+      const model = genAI.getGenerativeModel({ 
+        model: this.settings.geminiModel || "gemini-1.5-flash",
+        systemInstruction: messages.find(m => m.role === 'system')?.content
       });
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: messages.map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
-        })),
-        config: {
-          temperature,
-          systemInstruction: messages.find(m => m.role === 'system')?.content
-        }
-      });
-      return result.text || '';
+
+      const pureMessages = messages.filter(m => m.role !== 'system');
+      const history = pureMessages.slice(0, -1).map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      }));
+      const latestMessage = pureMessages[pureMessages.length - 1].content;
+
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(latestMessage);
+      return result.response.text() || '';
     }
   }
 
   async runChat(history: Message[], onStep?: AgentCallback): Promise<string> {
-    const contextMessages = [
-      { role: 'system', content: SYSTEM_PROMPT + (this.profile ? `\n\n用户档案：${JSON.stringify(this.profile)}` : '') },
-      ...history.map(m => ({ role: m.role, content: m.content }))
-    ];
-
-    let currentPrompt = "\n\n请按照 Thought/Action/Action Input/Observation 格式进行思考。如果没有更多工具需要调用，请直接给出 Final Answer。";
-    
-    let iterations = 0;
-    const maxIterations = 5;
-
-    while (iterations < maxIterations) {
-      const response = await this.callLLM([...contextMessages, { role: 'user', content: currentPrompt }]);
-      
-      const thoughtMatch = response.match(/Thought:\s*(.*)/i);
-      const actionMatch = response.match(/Action:\s*(.*)/i);
-      const actionInputMatch = response.match(/Action Input:\s*(.*)/i);
-      const finalAnswerMatch = response.match(/Final Answer:\s*([\s\S]*)/i);
-
-      if (finalAnswerMatch) {
-        return finalAnswerMatch[1].trim();
+    try {
+      let profileContext = "";
+      if (this.profile) {
+        profileContext = `\n\n【用户档案】\n${JSON.stringify(this.profile)}`;
+        if (this.profile.nickname) {
+          profileContext += `\n用户希望你称呼他/她为：${this.profile.nickname}。请在回应中自然、亲切地使用这个称呼。`;
+        }
       }
 
-      if (thoughtMatch && actionMatch) {
-        const step: AgentStep = {
-          thought: thoughtMatch[1],
-          action: actionMatch[1].trim(),
-          actionInput: actionInputMatch?.[1].trim() || ''
-        };
-        
-        onStep?.(step);
+      const contextMessages = [
+        { role: 'system', content: SYSTEM_PROMPT + profileContext },
+        ...history.map(m => ({ role: m.role, content: m.content }))
+      ];
 
-        let observation = "";
-        try {
-          if (step.action === 'search_memories') {
-            const query = step.actionInput.toLowerCase();
-            const allMemories = await db.memories.toArray();
-            const results = allMemories.filter(m => 
-              m.content.toLowerCase().includes(query) || 
-              m.category.toLowerCase().includes(query) ||
-              m.domain.toLowerCase().includes(query)
-            );
-            observation = results.length > 0 ? JSON.stringify(results.slice(0, 5)) : "No relevant memories found.";
-          } else if (step.action === 'update_memory') {
-            const input = JSON.parse(step.actionInput);
-            const id = uuidv4();
-            await db.memories.put({
-              id,
-              ...input,
-              updatedAt: Date.now(),
-              connections: []
-            });
-            observation = "Memory updated successfully.";
-          } else {
-            observation = "Unknown tool.";
-          }
-        } catch (e: any) {
-          observation = `Error in tool: ${e.message}`;
+      let currentPrompt = "\n\n请按照 Thought/Action/Action Input/Observation 格式进行思考。如果没有更多工具需要调用，请直接给出 Final Answer。";
+      
+      let iterations = 0;
+      const maxIterations = 5;
+
+      while (iterations < maxIterations) {
+        const response = await this.callLLM([...contextMessages, { role: 'user', content: currentPrompt }]);
+        
+        const thoughtMatch = response.match(/Thought:\s*(.*)/i);
+        const actionMatch = response.match(/Action:\s*(.*)/i);
+        const actionInputMatch = response.match(/Action Input:\s*(.*)/i);
+        const finalAnswerMatch = response.match(/Final Answer:\s*([\s\S]*)/i);
+
+        if (finalAnswerMatch) {
+          return finalAnswerMatch[1].trim();
         }
 
-        step.observation = observation;
-        onStep?.(step);
+        if (thoughtMatch && actionMatch) {
+          const step: AgentStep = {
+            thought: thoughtMatch[1],
+            action: actionMatch[1].trim(),
+            actionInput: actionInputMatch?.[1].trim() || ''
+          };
+          
+          onStep?.(step);
 
-        currentPrompt += `\nThought: ${step.thought}\nAction: ${step.action}\nAction Input: ${step.actionInput}\nObservation: ${step.observation}`;
-      } else {
-        // Fallback if formatting is weird
-        return response.replace(/Thought:|Action:|Action Input:|Observation:/gi, '').trim();
+          let observation = "";
+          try {
+            if (step.action === 'search_memories') {
+              const query = step.actionInput.toLowerCase();
+              const allMemories = await db.memories.toArray();
+              const results = allMemories.filter(m => 
+                m.content.toLowerCase().includes(query) || 
+                m.category.toLowerCase().includes(query) ||
+                m.domain.toLowerCase().includes(query)
+              );
+              observation = results.length > 0 ? JSON.stringify(results.slice(0, 5)) : "No relevant memories found.";
+            } else if (step.action === 'update_memory') {
+              const input = JSON.parse(step.actionInput);
+              const id = uuidv4();
+              await db.memories.put({
+                id,
+                ...input,
+                updatedAt: Date.now(),
+                connections: []
+              });
+              observation = "Memory updated successfully.";
+            } else {
+              observation = "Unknown tool.";
+            }
+          } catch (e: any) {
+            observation = `Error in tool: ${e.message}`;
+          }
+
+          step.observation = observation;
+          onStep?.(step);
+
+          currentPrompt += `\nThought: ${step.thought}\nAction: ${step.action}\nAction Input: ${step.actionInput}\nObservation: ${step.observation}`;
+        } else {
+          // Fallback if formatting is weird
+          return response.replace(/Thought:|Action:|Action Input:|Observation:/gi, '').trim();
+        }
+
+        iterations++;
       }
 
-      iterations++;
+      return "抱歉，我思考得太久了，没能给出最终回应。";
+    } catch (error: any) {
+      console.error('runChat error:', error);
+      return `系统错误: 无法获取回复。 (${error.message}) 请检查网络连接或 API key 配置。`;
     }
-
-    return "抱歉，我思考得太久了，没能给出最终回应。";
   }
 
   async archiveChat(chat: Chat): Promise<void> {

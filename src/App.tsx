@@ -46,6 +46,7 @@ export default function App() {
   });
 
   const [profileForm, setProfileForm] = useState({
+    nickname: '',
     age: '',
     occupation: '',
     emotional_state: '',
@@ -103,6 +104,7 @@ export default function App() {
   useEffect(() => {
     if (userProfileData) {
       setProfileForm({
+        nickname: userProfileData.nickname || '',
         age: userProfileData.age?.toString() || '',
         occupation: userProfileData.occupation || '',
         emotional_state: userProfileData.emotional_state || '',
@@ -354,19 +356,40 @@ export default function App() {
                 <MessageSquare className={`min-w-4 h-4 ${
                   activeChatId === chat.id ? 'text-[#5A5A40]' : 'text-[#8E8B82]'
                 }`} />
-                <span className={`truncate text-sm font-medium ${activeChatId === chat.id ? 'text-[#2D2926]' : 'text-[#2D2926]'}`}>
+                <span className={`truncate text-sm font-medium ${activeChatId === chat.id ? 'text-[#2D2926]' : 'text-[#2D2926]'} flex items-center gap-1.5`}>
+                  {chat.isArchived && <Database className="w-3 h-3 text-[#A6A298] shrink-0" />}
                   {chat.title}
                 </span>
               </div>
-              <button 
-                onClick={(e) => deleteChat(e, chat.id)}
-                className={`text-[#A6A298] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 ${
-                  chats.length === 1 ? 'hidden' : ''
-                }`}
-                title="删除对话"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {!chat.isArchived && chat.messages.length > 0 && (
+                  <button 
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (settingsData) {
+                        const agent = new AgentService(settingsData, userProfileData);
+                        setIsLoading(true);
+                        await agent.archiveChat(chat);
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="text-[#A6A298] hover:text-[#5A5A40] p-1 rounded hover:bg-[#D9D4C7]"
+                    title="归档对话"
+                  >
+                    <Database className="w-4 h-4" />
+                  </button>
+                )}
+                <button 
+                  onClick={(e) => deleteChat(e, chat.id)}
+                  className={`text-[#A6A298] hover:text-red-500 p-1 rounded hover:bg-red-50 ${
+                    chats.length === 1 ? 'hidden' : ''
+                  }`}
+                  title="删除对话"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+
             </div>
           ))}
         </nav>
@@ -375,9 +398,9 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-[#D9D4C7] border border-[#C5C0B3] flex items-center justify-center font-serif text-lg text-[#5A5A40]">理</div>
             <div className="flex-1">
-              <div className="text-sm font-semibold">AI 心理导师</div>
+              <div className="text-sm font-semibold">{userProfileData?.nickname || '我的档案'}</div>
               <div className="text-[10px] text-[#8E8B82] flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> 在线咨询中
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> 咨询模式活跃
               </div>
             </div>
           </div>
@@ -422,10 +445,29 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div>
+          <div className="flex-1">
             <h2 className="text-lg font-serif italic text-[#2D2926]">{activeChat?.title || 'AI 心理咨询师'}</h2>
-            <p className="text-[10px] text-[#A6A298] uppercase tracking-widest mt-0.5">正在与 AI 导师进行对话</p>
+            <p className="text-[10px] text-[#A6A298] uppercase tracking-widest mt-0.5">
+              {activeChat?.isArchived ? '本对话已归档为长期记忆' : '正在与 AI 导师进行对话'}
+            </p>
           </div>
+          
+          {activeChat && !activeChat.isArchived && activeChat.messages.length > 0 && (
+            <button 
+              onClick={async () => {
+                if (settingsData) {
+                  const agent = new AgentService(settingsData, userProfileData);
+                  setIsLoading(true);
+                  await agent.archiveChat(activeChat);
+                  setIsLoading(false);
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#F5F5F0] hover:bg-[#EAE6DD] text-[#5A5A40] rounded-xl text-xs font-semibold transition-all border border-[#E5E1D8]"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>手动归档</span>
+            </button>
+          )}
         </header>
 
         {/* Chat Area */}
@@ -636,6 +678,10 @@ export default function App() {
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
               <form id="profile-form" onSubmit={saveProfile} className="space-y-4">
                 <div>
+                  <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">称呼 (怎么称呼你)</label>
+                  <input type="text" placeholder="如：小张、王先生" value={profileForm.nickname} onChange={e => setProfileForm({...profileForm, nickname: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
+                </div>
+                <div>
                   <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">年龄</label>
                   <input type="number" value={profileForm.age} onChange={e => setProfileForm({...profileForm, age: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
                 </div>
@@ -727,44 +773,90 @@ export default function App() {
                       </>
                     )}
                     {settingsForm.provider === 'gemini' && (
-                      <div>
-                        <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">Gemini API Key</label>
-                        <input type="password" value={settingsForm.geminiApiKey || ''} onChange={e => setSettingsForm({...settingsForm, geminiApiKey: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
-                      </div>
+                      <>
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">Gemini API Key</label>
+                          <input type="password" value={settingsForm.geminiApiKey || ''} onChange={e => setSettingsForm({...settingsForm, geminiApiKey: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">模型</label>
+                          <input type="text" placeholder="gemini-3-flash-preview" value={settingsForm.geminiModel || ''} onChange={e => setSettingsForm({...settingsForm, geminiModel: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
+                        </div>
+                      </>
                     )}
                   </>
                 ) : (
                   <>
-                    <div>
-                      <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">用户头像URL / Base64</label>
-                      <input type="text" placeholder="粘贴图片URL..." value={settingsForm.userAvatar || ''} onChange={e => setSettingsForm({...settingsForm, userAvatar: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
-                      <input type="file" accept="image/*" className="mt-2 text-xs" onChange={(e) => {
-                         const file = e.target.files?.[0];
-                         if (file) {
-                           const reader = new FileReader();
-                           reader.onload = (ev) => setSettingsForm({...settingsForm, userAvatar: ev.target?.result as string});
-                           reader.readAsDataURL(file);
-                         }
-                      }} />
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-2">用户头像 (上传并保存)</label>
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-2xl bg-[#D9D4C7] flex-shrink-0 flex items-center justify-center overflow-hidden border border-[#E5E1D8]">
+                            {settingsForm.userAvatar ? (
+                              <img src={settingsForm.userAvatar} className="w-full h-full object-cover" alt="User avatar preview" />
+                            ) : (
+                              <User className="w-8 h-8 text-[#5A5A40]" />
+                            )}
+                          </div>
+                          <label className="flex-1 cursor-pointer">
+                            <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                              点击上传新头像
+                            </div>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => setSettingsForm({...settingsForm, userAvatar: ev.target?.result as string});
+                                  reader.readAsDataURL(file);
+                                }
+                              }} 
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-2">AI 助手头像 (上传并保存)</label>
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-2xl bg-[#5A5A40] flex-shrink-0 flex items-center justify-center overflow-hidden border border-[#E5E1D8]">
+                            {settingsForm.assistantAvatar ? (
+                              <img src={settingsForm.assistantAvatar} className="w-full h-full object-cover" alt="AI avatar preview" />
+                            ) : (
+                              <span className="text-white font-serif italic text-2xl">心</span>
+                            )}
+                          </div>
+                          <label className="flex-1 cursor-pointer">
+                            <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                              点击上传新头像
+                            </div>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => setSettingsForm({...settingsForm, assistantAvatar: ev.target?.result as string});
+                                  reader.readAsDataURL(file);
+                                }
+                              }} 
+                            />
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">AI 助手头像URL / Base64</label>
-                      <input type="text" placeholder="粘贴图片URL..." value={settingsForm.assistantAvatar || ''} onChange={e => setSettingsForm({...settingsForm, assistantAvatar: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
-                      <input type="file" accept="image/*" className="mt-2 text-xs" onChange={(e) => {
-                         const file = e.target.files?.[0];
-                         if (file) {
-                           const reader = new FileReader();
-                           reader.onload = (ev) => setSettingsForm({...settingsForm, assistantAvatar: ev.target?.result as string});
-                           reader.readAsDataURL(file);
-                         }
-                      }} />
-                    </div>
-                    <div className="pt-2">
-                       <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">聊天背景模式</label>
+
+                    <div className="pt-4 border-t border-[#E5E1D8] mt-4">
+                       <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-2">聊天背景模式</label>
                        <select 
                          value={settingsForm.chatBackgroundMode}
                          onChange={(e) => setSettingsForm({...settingsForm, chatBackgroundMode: e.target.value as any})}
-                         className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40] appearance-none mb-3"
+                         className="w-full p-3 bg-white border border-[#E5E1D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40] appearance-none mb-4"
                        >
                          <option value="default">默认白底</option>
                          <option value="color">纯色背景</option>
@@ -772,24 +864,43 @@ export default function App() {
                        </select>
 
                        {settingsForm.chatBackgroundMode === 'color' && (
-                         <div>
-                           <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">背景颜色</label>
-                           <input type="color" value={settingsForm.chatBackgroundColor || '#ffffff'} onChange={e => setSettingsForm({...settingsForm, chatBackgroundColor: e.target.value})} className="w-full h-10 p-1 bg-white border border-[#E5E1D8] rounded-lg" />
+                         <div className="fade-in">
+                           <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-2">选择背景颜色</label>
+                           <div className="flex gap-2">
+                             <input type="color" value={settingsForm.chatBackgroundColor || '#ffffff'} onChange={e => setSettingsForm({...settingsForm, chatBackgroundColor: e.target.value})} className="w-12 h-12 p-1 bg-white border border-[#E5E1D8] rounded-xl cursor-pointer" />
+                             <input type="text" value={settingsForm.chatBackgroundColor} onChange={e => setSettingsForm({...settingsForm, chatBackgroundColor: e.target.value})} className="flex-1 p-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]" />
+                           </div>
                          </div>
                        )}
 
                        {settingsForm.chatBackgroundMode === 'image' && (
-                         <div>
-                           <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">背景图片URL / Base64</label>
-                           <input type="text" placeholder="粘贴图片URL..." value={settingsForm.chatBackgroundImage || ''} onChange={e => setSettingsForm({...settingsForm, chatBackgroundImage: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
-                           <input type="file" accept="image/*" className="mt-2 text-xs" onChange={(e) => {
-                             const file = e.target.files?.[0];
-                             if (file) {
-                               const reader = new FileReader();
-                               reader.onload = (ev) => setSettingsForm({...settingsForm, chatBackgroundImage: ev.target?.result as string});
-                               reader.readAsDataURL(file);
-                             }
-                           }} />
+                         <div className="fade-in">
+                           <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-2">背景图片 (上传并保存)</label>
+                           <div className="space-y-3">
+                             {settingsForm.chatBackgroundImage && (
+                               <div className="w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-[#E5E1D8]">
+                                 <img src={settingsForm.chatBackgroundImage} className="w-full h-full object-cover" alt="Background preview" />
+                               </div>
+                             )}
+                             <label className="block cursor-pointer">
+                               <div className="px-4 py-3 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                                 {settingsForm.chatBackgroundImage ? '更换背景图片' : '上传背景图片'}
+                               </div>
+                               <input 
+                                 type="file" 
+                                 accept="image/*" 
+                                 className="hidden" 
+                                 onChange={(e) => {
+                                   const file = e.target.files?.[0];
+                                   if (file) {
+                                     const reader = new FileReader();
+                                     reader.onload = (ev) => setSettingsForm({...settingsForm, chatBackgroundImage: ev.target?.result as string});
+                                     reader.readAsDataURL(file);
+                                   }
+                                 }} 
+                               />
+                             </label>
+                           </div>
                          </div>
                        )}
                     </div>
