@@ -302,9 +302,10 @@ export class AgentService {
 
   async runChat(history: Message[], onStep?: AgentCallback): Promise<string> {
     try {
-      let profileContext = "";
+      const mentorName = this.settings.assistantName || "AI 心理咨询师";
+      let profileContext = `\n\n你现在的名字设定为：${mentorName}，请以此身份与用户交流。`;
       if (this.profile) {
-        profileContext = `\n\n【用户档案】\n${JSON.stringify(this.profile)}`;
+        profileContext += `\n\n【用户档案】\n${JSON.stringify(this.profile)}`;
         if (this.profile.nickname) {
           profileContext += `\n用户当前希望被称呼为：${this.profile.nickname}。`;
         }

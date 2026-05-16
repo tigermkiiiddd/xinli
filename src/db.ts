@@ -20,6 +20,7 @@ export interface AppSettings {
   geminiModel?: string;
   userAvatar?: string;
   assistantAvatar?: string;
+  assistantName?: string;
   chatBackgroundMode?: 'default' | 'color' | 'image';
   chatBackgroundColor?: string;
   chatBackgroundImage?: string;

@@ -23,6 +23,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMentorModalOpen, setIsMentorModalOpen] = useState(false);
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
@@ -42,6 +43,7 @@ export default function App() {
     chatBackgroundColor: '#f9f8f6',
     chatBackgroundImage: '',
     assistantAvatar: '',
+    assistantName: '心语',
     userAvatar: ''
   });
 
@@ -445,11 +447,23 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex-1">
-            <h2 className="text-lg font-serif italic text-[#2D2926]">{activeChat?.title || 'AI 心理咨询师'}</h2>
-            <p className="text-[10px] text-[#A6A298] uppercase tracking-widest mt-0.5">
-              {activeChat?.isArchived ? '本对话已归档为长期记忆' : '正在与 AI 导师进行对话'}
-            </p>
+          <div className="flex-1 flex items-center gap-3 cursor-pointer group" onClick={() => setIsMentorModalOpen(true)}>
+            <div className="relative">
+              {settingsForm.assistantAvatar ? (
+                <img src={settingsForm.assistantAvatar} alt="Mentor" className="w-8 h-8 rounded-full object-cover border border-[#E5E1D8] group-hover:border-[#5A5A40] transition-colors" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#5A5A40] flex items-center justify-center text-white text-xs font-serif italic group-hover:bg-[#4A4A35] transition-colors">
+                  {settingsForm.assistantName?.charAt(0) || '心'}
+                </div>
+              )}
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
+            </div>
+            <div>
+              <h2 className="text-lg font-serif italic text-[#2D2926] group-hover:text-[#5A5A40] transition-colors">{settingsForm.assistantName || 'AI 心理咨询师'}</h2>
+              <p className="text-[10px] text-[#A6A298] uppercase tracking-widest mt-0.5">
+                {activeChat?.isArchived ? '本对话已归档为长期记忆' : '点击头像以自定义我的设定'}
+              </p>
+            </div>
           </div>
           
           {activeChat && !activeChat.isArchived && activeChat.messages.length > 0 && (
@@ -501,13 +515,19 @@ export default function App() {
                   className={`flex gap-4 fade-in group ${message.role === 'user' ? 'flex-row-reverse ml-auto max-w-[80%]' : 'max-w-[80%]'}`}
                 >
                   {message.role === 'assistant' && (
-                    settingsForm.assistantAvatar ? (
-                      <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-9 h-9 rounded-xl flex-shrink-0 object-cover mt-1 shadow-sm" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex-shrink-0 flex items-center justify-center text-white font-serif italic shadow-sm mt-1">
-                        心
-                      </div>
-                    )
+                    <button 
+                      onClick={() => setIsMentorModalOpen(true)}
+                      className="flex-shrink-0 transition-transform active:scale-95"
+                      title="点击编辑导师信息"
+                    >
+                      {settingsForm.assistantAvatar ? (
+                        <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-9 h-9 rounded-xl object-cover mt-1 shadow-sm border border-transparent hover:border-[#5A5A40]" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic shadow-sm mt-1 hover:bg-[#4A4A35]">
+                          {settingsForm.assistantName?.charAt(0) || '心'}
+                        </div>
+                      )}
+                    </button>
                   )}
                   {message.role === 'user' && (
                     settingsForm.userAvatar ? (
@@ -598,9 +618,15 @@ export default function App() {
             {isLoading && (
               <div className="flex flex-col gap-4 fade-in max-w-[80%]">
                 <div className="flex gap-4">
-                  <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex-shrink-0 flex items-center justify-center text-white font-serif italic mt-1 shadow-sm">
-                    心
-                  </div>
+                  <button onClick={() => setIsMentorModalOpen(true)} className="flex-shrink-0">
+                    {settingsForm.assistantAvatar ? (
+                      <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-9 h-9 rounded-xl object-cover mt-1 shadow-sm" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic mt-1 shadow-sm px-2">
+                        {settingsForm.assistantName?.charAt(0) || '心'}
+                      </div>
+                    )}
+                  </button>
                   <div className="bg-[#F5F5F0] border border-[#E5E1D8] rounded-2xl p-4 rounded-tl-none shadow-sm flex items-center gap-1.5 h-12">
                     <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -664,6 +690,96 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Mentor Customization Modal */}
+      {isMentorModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm fade-in">
+          <div className="bg-[#F9F8F6] rounded-2xl w-full max-w-md overflow-hidden shadow-xl border border-[#E5E1D8] flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-[#E5E1D8] flex justify-between items-center bg-white">
+              <h3 className="font-serif italic font-semibold text-[#5A5A40] text-lg">心理导师设定</h3>
+              <button onClick={() => setIsMentorModalOpen(false)} className="text-[#8E8B82] hover:text-[#2D2926] p-1 rounded-md hover:bg-slate-100 transition-colors">
+                <X className="w-5 h-5"/>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+              <div className="space-y-6">
+                <div className="flex flex-col items-center gap-4 py-2">
+                  <div className="relative group">
+                    <div className="w-24 h-24 rounded-3xl bg-[#5A5A40] flex items-center justify-center overflow-hidden border-2 border-[#E5E1D8] shadow-md transition-all group-hover:border-[#5A5A40]">
+                      {settingsForm.assistantAvatar ? (
+                        <img src={settingsForm.assistantAvatar} className="w-full h-full object-cover" alt="Mentor avatar preview" />
+                      ) : (
+                        <span className="text-white font-serif italic text-4xl">{settingsForm.assistantName?.charAt(0) || '心'}</span>
+                      )}
+                    </div>
+                    <label className="absolute -bottom-2 -right-2 bg-white p-2 rounded-full shadow-lg border border-[#E5E1D8] cursor-pointer hover:bg-[#F5F5F0] transition-colors">
+                      <Edit2 className="w-4 h-4 text-[#5A5A40]" />
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const newAvatar = ev.target?.result as string;
+                              setSettingsForm({...settingsForm, assistantAvatar: newAvatar});
+                              db.settings.update(1, { assistantAvatar: newAvatar });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-[#A6A298] uppercase tracking-widest font-bold">点击图标更换导师头像</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">导师称呼 (你可以为我起个名字)</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="如：心心、王导师" 
+                        value={settingsForm.assistantName} 
+                        onChange={e => {
+                          const newName = e.target.value;
+                          setSettingsForm({...settingsForm, assistantName: newName});
+                        }} 
+                        onBlur={async () => {
+                          await db.settings.update(1, { assistantName: settingsForm.assistantName });
+                        }}
+                        className="w-full p-3 bg-white border border-[#E5E1D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40] pr-10" 
+                      />
+                      <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A5A40]/40" />
+                    </div>
+                  </div>
+
+                  <div className="bg-[#F5F5F0] p-4 rounded-xl border border-[#E5E1D8]">
+                    <div className="flex items-center gap-2 mb-2">
+                       <Brain className="w-4 h-4 text-[#5A5A40]" />
+                       <span className="text-xs font-bold text-[#5A5A40]">导师性格说明</span>
+                    </div>
+                    <p className="text-xs text-[#8E8B82] leading-relaxed">
+                      你可以随时通过对话来要求我调整语气和风格。我会将这些偏好记在我的长期记忆库中。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 bg-white border-t border-[#E5E1D8] flex justify-end">
+              <button 
+                onClick={() => setIsMentorModalOpen(false)} 
+                className="px-6 py-2 bg-[#5A5A40] text-white rounded-xl text-sm font-medium hover:bg-[#4A4A35] transition-colors shadow-sm"
+              >
+                完成设定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Profile Modal */}
       {isProfileOpen && (
