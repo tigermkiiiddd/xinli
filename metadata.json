@@ -1,6 +1,6 @@
 {
   "name": "MindCare - 心理咨询助手",
-  "description": "专业的AI心理咨询与辅导助手，支持完整对话管理及OpenAI兼容供应商配置。",
+  "description": "专业的AI心理咨询系统，搭载 Re-Act Agent 架构与 Graph RAG 风格的长短期记忆管理，支持自动归档整理对话深度档案。",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

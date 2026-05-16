@@ -3,16 +3,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { 
   MessageSquare, Plus, Trash2, Bot, User, 
   Menu, X, Sparkles, Settings, UserCircle,
-  Edit2, RefreshCcw, Check
+  Edit2, RefreshCcw, Check, Brain, Database,
+  Search, Trash
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Chat, type Message, type UserProfile, type AppSettings } from './db';
-import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
+import { db, type Chat, type Message, type UserProfile, type AppSettings, type MemoryEntry } from './db';
+import { AgentService, type AgentStep } from './services/agentService';
 
 export default function App() {
   const chats = useLiveQuery(() => db.chats.orderBy('updatedAt').reverse().toArray()) || [];
+  const memories = useLiveQuery(() => db.memories.orderBy('updatedAt').reverse().toArray()) || [];
   const userProfileData = useLiveQuery(() => db.userProfile.get(1));
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -22,9 +23,13 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [activeSettingsTab, setActiveSettingsTab] = useState<'api' | 'ui'>('api');
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [memorySearchTerm, setMemorySearchTerm] = useState('');
+
   const settingsData = useLiveQuery(() => db.settings.get(1));
   const [settingsForm, setSettingsForm] = useState<AppSettings>({
     id: 1,
@@ -49,6 +54,27 @@ export default function App() {
   });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-archiving logic
+  useEffect(() => {
+    const checkArchivable = async () => {
+      if (!settingsData) return;
+      const allChats = await db.chats.toArray();
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+      const archivable = allChats.filter(c => c.updatedAt < twoHoursAgo && !c.isArchived && c.messages.length > 0);
+      
+      if (archivable.length > 0) {
+        console.log(`Checking ${archivable.length} chats for archiving...`);
+        const agent = new AgentService(settingsData, userProfileData);
+        for (const chat of archivable) {
+          await agent.archiveChat(chat);
+        }
+      }
+    };
+    
+    const timeout = setTimeout(checkArchivable, 5000); // Check 5s after load
+    return () => clearTimeout(timeout);
+  }, [settingsData, userProfileData]);
 
   // Sync activeChatId and ensure at least one chat
   useEffect(() => {
@@ -151,6 +177,7 @@ export default function App() {
 
   const sendMessageToApi = async (messagesToSend: Message[], currentChat: Chat, titleToUpdate: string) => {
     setIsLoading(true);
+    setAgentSteps([]);
 
     try {
       await db.chats.put({
@@ -161,131 +188,17 @@ export default function App() {
       });
 
       const settings = settingsData || { provider: 'openai' } as AppSettings;
-      const provider = settings.provider || 'openai';
-      
-      // 1. Get user profile context
-      let profileContext = "";
-      if (userProfileData && Object.values(userProfileData).filter(Boolean).length > 0) {
-        profileContext = `\n\n【用户个性化档案】
-- 年龄：${userProfileData.age || '未知'}
-- 职业：${userProfileData.occupation || '未知'}
-- 长期情感状态/自评：${userProfileData.emotional_state || '未知'}
-- 辅导目标：${userProfileData.counseling_goals || '未知'}
-- 背景信息：${userProfileData.background_info || '无'}
-请在回应中自然地参考这些信息以提供更个性化的辅导。`;
-      }
+      const agent = new AgentService(settings, userProfileData);
 
-      // 2. Recognize emotion from the latest user message
-      const latestUserMessage = messagesToSend.filter((m: any) => m.role === 'user').pop()?.content || '';
-      let emotionLabel = '中性 (Neutral)';
-
-      const baseSystemContent = `你是一位专业、有同理心、经验丰富的心理咨询师。你的目标是提供心理支持、倾听用户的困扰、帮助他们进行情绪调节，并提供温和的建设性建议。
-在与用户交流时，请遵循以下原则：
-1. 始终保持专注、接纳和无条件积极关注。
-2. 避免说教或替用户做直接决定，引导他们自我探索。
-3. 语言需温和、体贴、真诚，使用鼓励性的语言。
-4. 如果评估到用户可能存在严重的精神危机或有自残/自杀倾向，请务必建议他们寻求专业的现场医疗帮助或拨打危机援助热线。`;
-
-      let replyContent = '';
-      let effectiveProvider = provider;
-
-      // Handle Fallback / Provider selection
-      if (effectiveProvider === 'openai' && !settings.openaiApiKey && settings.geminiApiKey) {
-        effectiveProvider = 'gemini';
-      }
-
-      if (effectiveProvider === 'gemini') {
-        const apiKey = settings.geminiApiKey;
-        if (!apiKey) {
-          throw new Error('未配置 Gemini API Key，请在设置中配置。');
-        }
-        const ai = new GoogleGenAI({ 
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
-        });
-
-        // Emotion recognition logic
-        if (latestUserMessage) {
-          try {
-            const result = await ai.models.generateContent({
-              model: "gemini-2.5-flash",
-              contents: [{ text: "You are an emotion analyzer. Analyze the user's text and return ONLY one of these labels: '积极 (Positive)', '消极 (Negative) - 悲伤', '消极 (Negative) - 愤怒', '消极 (Negative) - 焦虑', or '中性 (Neutral)'.\n\nUser text: " + latestUserMessage }]
-            });
-            emotionLabel = result.text?.trim() || emotionLabel;
-          } catch (e) {
-            console.error('Gemini emotion recognition failed:', e);
-          }
-        }
-
-        const emotionContext = `\n\n【实时情绪识别】\n目前检测到用户这段话的情感状态为：${emotionLabel}。\n如果用户情绪低落（如悲伤、焦虑、压力大），请表现出更多的同情、耐心 and 理解；如果心情积极，可以更受鼓励并探讨进展，根据情绪动态调整回应语气。`;
-        
-        const genAiMessages = messagesToSend.map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
-        }));
-
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: genAiMessages,
-          config: {
-            systemInstruction: baseSystemContent + profileContext + emotionContext,
-            temperature: 0.7,
-            maxOutputTokens: 1500
-          }
-        });
-        replyContent = result.text || '';
-
-      } else {
-        const apiKey = settings.openaiApiKey;
-        if (!apiKey) {
-          throw new Error('未配置 OpenAI API Key，请在设置中配置。');
-        }
-        const openai = new OpenAI({
-          apiKey: apiKey,
-          baseURL: settings.openaiBaseUrl || 'https://api.openai.com/v1',
-          dangerouslyAllowBrowser: true
-        });
-
-        // Emotion recognition logic
-        if (latestUserMessage) {
-          try {
-            const resp = await openai.chat.completions.create({
-              model: settings.openaiModel || 'gpt-3.5-turbo',
-              messages: [
-                { role: "system", content: "You are an emotion analyzer. Analyze the user's text and return ONLY one of these labels: '积极 (Positive)', '消极 (Negative) - 悲伤', '消极 (Negative) - 愤怒', '消极 (Negative) - 焦虑', or '中性 (Neutral)'." },
-                { role: "user", content: latestUserMessage }
-              ],
-              temperature: 0,
-              max_tokens: 15,
-            });
-            emotionLabel = resp.choices[0]?.message?.content?.trim() || emotionLabel;
-          } catch (e) {
-            console.error('OpenAI emotion recognition failed:', e);
-          }
-        }
-
-        const emotionContext = `\n\n【实时情绪识别】\n目前检测到用户这段话的情感状态为：${emotionLabel}。\n如果用户情绪低落（如悲伤、焦虑、压力大），请表现出更多的同情、耐心和理解；如果心情积极，可以更受鼓励并探讨进展，根据情绪动态调整回应语气。`;
-        
-        const apiMessages = [
-          { role: 'system', content: baseSystemContent + profileContext + emotionContext },
-          ...messagesToSend.map(m => ({ role: m.role, content: m.content }))
-        ];
-
-        const response = await openai.chat.completions.create({
-          model: settings.openaiModel || 'gpt-3.5-turbo',
-          messages: apiMessages as any,
-          temperature: 0.7,
-          max_tokens: 1500,
-        });
-        replyContent = response.choices[0]?.message?.content || '';
-      }
+      const replyContent = await agent.runChat(messagesToSend, (step) => {
+        setAgentSteps(prev => [...prev, step]);
+      });
 
       const assistantMessage: Message = {
         id: uuidv4(),
         role: 'assistant',
         content: replyContent,
         createdAt: Date.now(),
-        emotion: emotionLabel,
       };
 
       const freshChat = await db.chats.get(currentChat.id);
@@ -315,6 +228,7 @@ export default function App() {
       }
     } finally {
       setIsLoading(false);
+      setAgentSteps([]);
     }
   };
 
@@ -468,6 +382,13 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsMemoryOpen(true)} 
+              className="p-2 text-[#8E8B82] hover:text-[#5A5A40] hover:bg-[#D9D4C7] rounded-lg transition-colors" 
+              title="长期记忆库"
+            >
+              <Brain className="w-5 h-5" />
+            </button>
             <button 
               onClick={() => setIsSettingsOpen(true)} 
               className="p-2 text-[#8E8B82] hover:text-[#5A5A40] hover:bg-[#D9D4C7] rounded-lg transition-colors" 
@@ -633,15 +554,32 @@ export default function App() {
             )}
             
             {isLoading && (
-              <div className="flex gap-4 fade-in max-w-[80%]">
-                <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex-shrink-0 flex items-center justify-center text-white font-serif italic mt-1 shadow-sm">
-                  心
+              <div className="flex flex-col gap-4 fade-in max-w-[80%]">
+                <div className="flex gap-4">
+                  <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex-shrink-0 flex items-center justify-center text-white font-serif italic mt-1 shadow-sm">
+                    心
+                  </div>
+                  <div className="bg-[#F5F5F0] border border-[#E5E1D8] rounded-2xl p-4 rounded-tl-none shadow-sm flex items-center gap-1.5 h-12">
+                    <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce"></div>
+                  </div>
                 </div>
-                <div className="bg-[#F5F5F0] border border-[#E5E1D8] rounded-2xl p-4 rounded-tl-none shadow-sm flex items-center gap-1.5 h-12">
-                  <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce"></div>
-                </div>
+                
+                {agentSteps.length > 0 && (
+                  <div className="ml-12 p-3 bg-white/50 border border-dashed border-[#E5E1D8] rounded-xl text-[11px] space-y-2">
+                    <div className="flex items-center gap-2 text-[#A6A298] font-bold uppercase tracking-tight">
+                      <Database className="w-3 h-3" /> Agent 思考步骤
+                    </div>
+                    {agentSteps.map((step, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="text-[#5A5A40]">Thought: {step.thought}</div>
+                        {step.action && <div className="text-blue-600">Action: {step.action} ({step.actionInput})</div>}
+                        {step.observation && <div className="text-green-600">Observation: {step.observation}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -866,6 +804,85 @@ export default function App() {
               <button type="submit" form="settings-form" className="px-5 py-2 bg-[#5A5A40] text-white rounded-xl text-sm font-medium hover:bg-[#4A4A35] transition-colors">
                 保存设置
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Memory Manager Modal */}
+      {isMemoryOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm fade-in">
+          <div className="bg-[#F9F8F6] rounded-2xl w-full max-w-4xl overflow-hidden shadow-xl border border-[#E5E1D8] flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-[#E5E1D8] flex justify-between items-center bg-white">
+              <div className="flex items-center gap-3">
+                <Brain className="w-6 h-6 text-[#5A5A40]" />
+                <h3 className="font-serif italic font-semibold text-[#5A5A40] text-xl">长期记忆库 (Memory Bank)</h3>
+              </div>
+              <button onClick={() => setIsMemoryOpen(false)} className="text-[#8E8B82] hover:text-[#2D2926] p-1 rounded-md hover:bg-slate-100 transition-colors">
+                <X className="w-5 h-5"/>
+              </button>
+            </div>
+            
+            <div className="p-4 bg-[#F2EFE9] border-b border-[#E5E1D8] flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A6A298]" />
+                <input 
+                  type="text" 
+                  placeholder="搜索记忆条目..." 
+                  value={memorySearchTerm}
+                  onChange={(e) => setMemorySearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-[#E5E1D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40] shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[#F9F8F6]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {memories
+                  .filter(m => m.content.toLowerCase().includes(memorySearchTerm.toLowerCase()) || m.category.toLowerCase().includes(memorySearchTerm.toLowerCase()))
+                  .map(memory => (
+                  <div key={memory.id} className="bg-white border border-[#E5E1D8] rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group relative">
+                    <div className="flex justify-between items-start mb-3">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        memory.category === 'Trauma' ? 'bg-red-50 text-red-600 border border-red-100' :
+                        memory.category === 'Growth' ? 'bg-green-50 text-green-600 border border-green-100' :
+                        'bg-blue-50 text-blue-600 border border-blue-100'
+                      }`}>
+                        {memory.category}
+                      </span>
+                      <button 
+                        onClick={() => db.memories.delete(memory.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-[#A6A298] hover:text-red-500 rounded-md hover:bg-red-50"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="text-[#2D2926] text-sm leading-relaxed mb-4 font-medium">
+                      {memory.content}
+                    </div>
+                    <div className="space-y-2 border-t border-[#F5F5F0] pt-3">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-[#A6A298] font-bold uppercase tracking-tighter">成立前提</span>
+                        <span className="text-xs text-[#5A5A40] italic">{memory.prerequisite || '未明确'}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-[#A6A298] font-bold uppercase tracking-tighter">作用领域</span>
+                        <span className="text-xs text-[#5A5A40] italic">{memory.domain || '未明确'}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 text-[10px] text-[#A6A298] text-right">
+                      更新于: {new Date(memory.updatedAt).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+                {memories.length === 0 && (
+                  <div className="col-span-full py-20 text-center text-[#A6A298]">
+                    <Database className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>目前还没有长期记忆条目</p>
+                    <p className="text-xs mt-1">对话结束后会自动通过 Re-Act Agent 进行归档整理</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

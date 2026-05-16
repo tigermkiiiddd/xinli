@@ -31,24 +31,42 @@ export interface Message {
   emotion?: string;
 }
 
+export interface MemoryConnection {
+  targetId: string;
+  type: 'related' | 'conflicting' | 'cause' | 'effect';
+}
+
+export interface MemoryEntry {
+  id: string;
+  category: 'Trauma' | 'Growth' | 'Relationship' | 'Habit' | 'Personality' | 'Crisis' | 'Resource' | 'Other';
+  content: string;
+  prerequisite: string; // 成立前提
+  domain: string; // 作用领域
+  updatedAt: number;
+  connections: MemoryConnection[];
+}
+
 export interface Chat {
   id: string;
   title: string;
   messages: Message[];
   updatedAt: number;
+  isArchived?: boolean;
 }
 
 export class MindCareDB extends Dexie {
   userProfile!: Table<UserProfile, number>;
   chats!: Table<Chat, string>;
   settings!: Table<AppSettings, number>;
+  memories!: Table<MemoryEntry, string>;
 
   constructor() {
     super('MindCareDB');
-    this.version(3).stores({
+    this.version(4).stores({
       userProfile: 'id',
-      chats: 'id, updatedAt',
-      settings: 'id'
+      chats: 'id, updatedAt, isArchived',
+      settings: 'id',
+      memories: 'id, category, updatedAt'
     });
   }
 }
