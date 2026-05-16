@@ -21,6 +21,7 @@ export interface AppSettings {
   userAvatar?: string;
   assistantAvatar?: string;
   assistantName?: string;
+  assistantPersonality?: string;
   chatBackgroundMode?: 'default' | 'color' | 'image';
   chatBackgroundColor?: string;
   chatBackgroundImage?: string;

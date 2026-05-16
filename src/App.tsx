@@ -762,8 +762,19 @@ export default function App() {
                        <Brain className="w-4 h-4 text-[#5A5A40]" />
                        <span className="text-xs font-bold text-[#5A5A40]">导师性格说明</span>
                     </div>
-                    <p className="text-xs text-[#8E8B82] leading-relaxed">
-                      你可以随时通过对话来要求我调整语气和风格。我会将这些偏好记在我的长期记忆库中。
+                    <textarea 
+                      value={settingsForm.assistantPersonality || ''} 
+                      onChange={e => {
+                        setSettingsForm({...settingsForm, assistantPersonality: e.target.value});
+                      }}
+                      onBlur={async () => {
+                        await db.settings.update(1, { assistantPersonality: settingsForm.assistantPersonality });
+                      }}
+                      placeholder="描述导师的性格风格、咨询流派或语言风格..."
+                      className="w-full h-24 p-2 bg-white border border-[#E5E1D8] rounded-lg text-xs leading-relaxed focus:outline-none focus:border-[#5A5A40] resize-none"
+                    />
+                    <p className="text-[10px] text-[#A6A298] mt-2 italic">
+                      提示：你也可以通过对话直接要求我调整性格。
                     </p>
                   </div>
                 </div>
