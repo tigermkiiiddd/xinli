@@ -642,8 +642,8 @@ export default function App() {
                     {agentSteps.map((step, idx) => (
                       <div key={idx} className="space-y-1">
                         <div className="text-[#5A5A40]">Thought: {step.thought}</div>
-                        {step.action && <div className="text-blue-600">Action: {step.action} ({step.actionInput})</div>}
-                        {step.observation && <div className="text-green-600">Observation: {step.observation}</div>}
+                        {step.action && <div className="text-blue-600">Action: {step.action} ({typeof step.actionInput === 'object' ? JSON.stringify(step.actionInput) : step.actionInput})</div>}
+                        {step.observation && <div className="text-green-600">Observation: {typeof step.observation === 'object' ? JSON.stringify(step.observation) : step.observation}</div>}
                       </div>
                     ))}
                   </div>
