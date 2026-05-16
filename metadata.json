@@ -1,0 +1,8 @@
+{
+  "name": "MindCare - 心理咨询助手",
+  "description": "专业的AI心理咨询与辅导助手，支持完整对话管理及OpenAI兼容供应商配置。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
