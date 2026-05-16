@@ -12,28 +12,51 @@ export interface AgentStep {
 
 export type AgentCallback = (step: AgentStep) => void;
 
-const SYSTEM_PROMPT = `你是一位专业、有同理心、经验丰富的心理咨询师 ReAct Agent。
-你的目标是提供心理支持，并利用“长期记忆”来更好地了解用户。
+const SYSTEM_PROMPT = `你是一位专业且温暖的心理咨询助手。你能够通过对话和长期记忆库来了解用户，提供个性化的情感支持和心理辅导建议。
 
-你拥有以下工具：
-1. search_memories(query: string): 搜索现有的长期记忆条目。
-2. update_memory(category, content, prerequisite, domain): 添加或更新用户的长期记忆。
-   - category: 'Trauma' | 'Growth' | 'Relationship' | 'Habit' | 'Personality' | 'Crisis' | 'Resource' | 'Other'
-   - content: 核心记忆内容
-   - prerequisite: 成立前提（该记忆在什么背景下成立）
-   - domain: 作用领域（该记忆影响用户生活的哪些方面）
+你的目标：
+1. 倾听用户的困扰，建立共情。
+2. 利用长期记忆库中的信息（如果有关联），提供更深刻的洞察。
+3. 在适当的时候，将用户表现出的性格特质、核心信念或重要的生活事件存入记忆库。
+4. 引导用户发现自身的力量。
 
-工作流程：
-- Thought: 思考当前对话，决定是否需要搜索记忆或更新记忆。
-- Action: 如果需要，调用工具。
-- Observation: 工具返回的结果。
-- ... (重复)
-- Final Answer: 最终给用户的温和、体贴的回应。
+关于记忆库的操作：
+- 当你需要了解用户过去的背景时，使用 search_memories。
+- 当你从对话中提炼出值得长期记住的信息时（如：核心性格、生活背景、重要他人、重复的情绪模式），使用 update_memory。
 
-注意：
-- 长期记忆应该像 Graph RAG 一样有条理，避免重复。如果是相似的信息，请更新现有条目。
-- 始终保持咨询师风格。
-- 在 Final Answer 中，不要向用户展示你的思考过程或 Action，只给回复。`;
+请以亲切、自然的语气对话。不要在回复中提到工具调用的细节。`;
+
+const TOOLS_SCHEMA = [
+  {
+    name: "search_memories",
+    description: "检索用户的长期记忆。为了提高命中率，建议提供一个包含多个相关关键词、短语或近义词的数组（例如：['童年', '幼年', '少年', '小时候', '早期经历']），这能帮助从不同侧面触发记忆匹配。",
+    parameters: {
+      type: "object",
+      properties: {
+        queries: {
+          type: "array",
+          items: { type: "string" },
+          description: "搜索关键词或短语列表"
+        }
+      },
+      required: ["queries"]
+    }
+  },
+  {
+    name: "update_memory",
+    description: "更新或添加一条长期记忆。用于记录识别出的稳定特质、核心信念或关键背景。",
+    parameters: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "记忆的具体内容" },
+        category: { type: "string", description: "类别，如：Trauma, Growth, Relationship, Habit, Personality, Crisis, Resource, Other" },
+        domain: { type: "string", description: "作用领域，如：职场, 亲密关系, 自我成长" },
+        prerequisite: { type: "string", description: "该记忆成立的前提或触发场景" }
+      },
+      required: ["content", "category", "domain"]
+    }
+  }
+];
 
 export class AgentService {
   private settings: AppSettings;
@@ -44,46 +67,48 @@ export class AgentService {
     this.profile = profile;
   }
 
-  private async callLLM(messages: any[], temperature = 0.7) {
-    if (this.settings.provider === 'openai') {
-      const openai = new OpenAI({
-        apiKey: this.settings.openaiApiKey,
-        baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
-        dangerouslyAllowBrowser: true // Client-side warning
-      });
-      
-      const fullMessages = [...messages];
-      const systemInstruction = messages.find(m => m.role === 'system')?.content;
-      const pureMessages = messages.filter(m => m.role !== 'system');
-      
-      if (systemInstruction) {
-        pureMessages.unshift({ role: 'system', content: systemInstruction });
+  private async executeLocalTool(name: string, args: any): Promise<string> {
+    try {
+      if (name === 'search_memories') {
+        const queries = (args.queries || [args.query]).map((q: string) => q.toLowerCase());
+        const allMemories = await db.memories.toArray();
+        
+        const resultSet = new Set<string>();
+        const finalResults: any[] = [];
+
+        for (const q of queries) {
+          const matched = allMemories.filter(m => 
+            !resultSet.has(m.id) && (
+              m.content.toLowerCase().includes(q) || 
+              m.category.toLowerCase().includes(q) ||
+              m.domain.toLowerCase().includes(q)
+            )
+          );
+          matched.forEach(m => {
+            resultSet.add(m.id);
+            finalResults.push(m);
+          });
+          if (finalResults.length >= 10) break;
+        }
+        
+        return finalResults.length > 0 ? JSON.stringify(finalResults.slice(0, 10)) : "未找到相关的记忆。";
+      } else if (name === 'update_memory') {
+        const id = uuidv4();
+        await db.memories.put({
+          id,
+          content: args.content,
+          category: args.category,
+          domain: args.domain,
+          prerequisite: args.prerequisite || '',
+          updatedAt: Date.now(),
+          connections: []
+        });
+        return "Memory updated successfully.";
       }
-
-      const response = await openai.chat.completions.create({
-        model: this.settings.openaiModel || 'gpt-3.5-turbo',
-        messages: pureMessages,
-        temperature,
-      });
-      return response.choices[0].message.content || '';
-    } else {
-      const genAI = new GoogleGenerativeAI(this.settings.geminiApiKey || '');
-      const model = genAI.getGenerativeModel({ 
-        model: this.settings.geminiModel || "gemini-1.5-flash",
-        systemInstruction: messages.find(m => m.role === 'system')?.content
-      });
-
-      const pureMessages = messages.filter(m => m.role !== 'system');
-      const history = pureMessages.slice(0, -1).map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
-      const latestMessage = pureMessages[pureMessages.length - 1].content;
-
-      const chat = model.startChat({ history });
-      const result = await chat.sendMessage(latestMessage);
-      return result.response.text() || '';
+    } catch (e: any) {
+      return `Error executing tool: ${e.message}`;
     }
+    return "Unknown tool.";
   }
 
   async runChat(history: Message[], onStep?: AgentCallback): Promise<string> {
@@ -92,86 +117,132 @@ export class AgentService {
       if (this.profile) {
         profileContext = `\n\n【用户档案】\n${JSON.stringify(this.profile)}`;
         if (this.profile.nickname) {
-          profileContext += `\n用户希望你称呼他/她为：${this.profile.nickname}。请在回应中自然、亲切地使用这个称呼。`;
+          profileContext += `\n用户当前希望被称呼为：${this.profile.nickname}。`;
         }
       }
 
-      const contextMessages = [
-        { role: 'system', content: SYSTEM_PROMPT + profileContext },
-        ...history.map(m => ({ role: m.role, content: m.content }))
-      ];
-
-      let currentPrompt = "\n\n请按照 Thought/Action/Action Input/Observation 格式进行思考。如果没有更多工具需要调用，请直接给出 Final Answer。";
-      
-      let iterations = 0;
-      const maxIterations = 5;
-
-      while (iterations < maxIterations) {
-        const response = await this.callLLM([...contextMessages, { role: 'user', content: currentPrompt }]);
-        
-        const thoughtMatch = response.match(/Thought:\s*(.*)/i);
-        const actionMatch = response.match(/Action:\s*(.*)/i);
-        const actionInputMatch = response.match(/Action Input:\s*(.*)/i);
-        const finalAnswerMatch = response.match(/Final Answer:\s*([\s\S]*)/i);
-
-        if (finalAnswerMatch) {
-          return finalAnswerMatch[1].trim();
-        }
-
-        if (thoughtMatch && actionMatch) {
-          const step: AgentStep = {
-            thought: thoughtMatch[1],
-            action: actionMatch[1].trim(),
-            actionInput: actionInputMatch?.[1].trim() || ''
-          };
-          
-          onStep?.(step);
-
-          let observation = "";
-          try {
-            if (step.action === 'search_memories') {
-              const query = step.actionInput.toLowerCase();
-              const allMemories = await db.memories.toArray();
-              const results = allMemories.filter(m => 
-                m.content.toLowerCase().includes(query) || 
-                m.category.toLowerCase().includes(query) ||
-                m.domain.toLowerCase().includes(query)
-              );
-              observation = results.length > 0 ? JSON.stringify(results.slice(0, 5)) : "No relevant memories found.";
-            } else if (step.action === 'update_memory') {
-              const input = JSON.parse(step.actionInput);
-              const id = uuidv4();
-              await db.memories.put({
-                id,
-                ...input,
-                updatedAt: Date.now(),
-                connections: []
-              });
-              observation = "Memory updated successfully.";
-            } else {
-              observation = "Unknown tool.";
-            }
-          } catch (e: any) {
-            observation = `Error in tool: ${e.message}`;
-          }
-
-          step.observation = observation;
-          onStep?.(step);
-
-          currentPrompt += `\nThought: ${step.thought}\nAction: ${step.action}\nAction Input: ${step.actionInput}\nObservation: ${step.observation}`;
-        } else {
-          // Fallback if formatting is weird
-          return response.replace(/Thought:|Action:|Action Input:|Observation:/gi, '').trim();
-        }
-
-        iterations++;
+      if (this.settings.provider === 'openai') {
+        return this.runOpenAI(history, profileContext, onStep);
+      } else {
+        return this.runGemini(history, profileContext, onStep);
       }
-
-      return "抱歉，我思考得太久了，没能给出最终回应。";
     } catch (error: any) {
       console.error('runChat error:', error);
-      return `系统错误: 无法获取回复。 (${error.message}) 请检查网络连接或 API key 配置。`;
+      return `系统错误: 无法获取回复。 (${error.message}) 请检查 API Key 配置。`;
     }
+  }
+
+  private async runOpenAI(history: Message[], profileContext: string, onStep?: AgentCallback): Promise<string> {
+    const openai = new OpenAI({
+      apiKey: this.settings.openaiApiKey,
+      baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
+      dangerouslyAllowBrowser: true
+    });
+
+    const messages: any[] = [
+      { role: 'system', content: SYSTEM_PROMPT + profileContext },
+      ...history.map(m => ({ role: m.role, content: m.content }))
+    ];
+
+    let iterations = 0;
+    while (iterations < 5) {
+      const response = await openai.chat.completions.create({
+        model: this.settings.openaiModel || 'gpt-3.5-turbo',
+        messages,
+        tools: TOOLS_SCHEMA.map(t => ({ type: 'function', function: t })),
+        tool_choice: 'auto',
+      });
+
+      const message = response.choices[0].message;
+      messages.push(message);
+
+      if (!message.tool_calls) {
+        return message.content || "";
+      }
+
+      for (const toolCall of message.tool_calls) {
+        const name = toolCall.function.name;
+        const args = JSON.parse(toolCall.function.arguments);
+        
+        onStep?.({
+          thought: `使用工具: ${name}`,
+          action: name,
+          actionInput: toolCall.function.arguments
+        });
+
+        const result = await this.executeLocalTool(name, args);
+        
+        onStep?.({
+          thought: `从 ${name} 获取了信息`,
+          action: name,
+          actionInput: toolCall.function.arguments,
+          observation: result
+        });
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: result
+        });
+      }
+      iterations++;
+    }
+    return "思考过深，未能给出回答。";
+  }
+
+  private async runGemini(history: Message[], profileContext: string, onStep?: AgentCallback): Promise<string> {
+    const genAI = new GoogleGenerativeAI(this.settings.geminiApiKey || '');
+    const model = genAI.getGenerativeModel({ 
+      model: this.settings.geminiModel || "gemini-1.5-flash",
+      systemInstruction: SYSTEM_PROMPT + profileContext,
+      tools: [{ functionDeclarations: TOOLS_SCHEMA }] as any
+    });
+
+    const chatHistory = history.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+    const lastUserMessage = history[history.length - 1].content;
+
+    const chat = model.startChat({ history: chatHistory });
+    let result = await chat.sendMessage(lastUserMessage);
+    
+    let iterations = 0;
+    while (iterations < 5) {
+      const call = result.response.candidates?.[0].content.parts.find(p => p.functionCall);
+      
+      if (!call || !call.functionCall) {
+        return result.response.text();
+      }
+
+      const { name, args } = call.functionCall;
+      
+      onStep?.({
+        thought: `正在调用 ${name} 检索信息...`,
+        action: name,
+        actionInput: JSON.stringify(args)
+      });
+
+      const observation = await this.executeLocalTool(name, args);
+      
+      onStep?.({
+        thought: `从 ${name} 获取了反馈`,
+        action: name,
+        actionInput: JSON.stringify(args),
+        observation
+      });
+
+      result = await chat.sendMessage([{
+        functionResponse: {
+          name,
+          response: { content: observation }
+        }
+      }]);
+      
+      iterations++;
+    }
+    
+    return result.response.text();
   }
 
   async archiveChat(chat: Chat): Promise<void> {
@@ -181,13 +252,13 @@ export class AgentService {
 [{ "category": "...", "content": "...", "prerequisite": "...", "domain": "..." }]
 分类范围: 'Trauma' | 'Growth' | 'Relationship' | 'Habit' | 'Personality' | 'Crisis' | 'Resource' | 'Other'`;
 
-    const response = await this.callLLM([{ role: 'user', content: prompt }], 0.3);
+    // Internal tool execution doesn't strictly need tool calling, standard prompt is fine for summarization
+    const response = await this.callOpenAIOrGeminiSimple(prompt);
     try {
       const jsonStr = response.match(/\[.*\]/s)?.[0];
       if (jsonStr) {
         const memories = JSON.parse(jsonStr);
         for (const m of memories) {
-          // Find existing and merge if needed? Simplified: just add for now
           await db.memories.put({
             id: uuidv4(),
             ...m,
@@ -201,4 +272,26 @@ export class AgentService {
       console.error('Archiving failed', e);
     }
   }
+
+  private async callOpenAIOrGeminiSimple(prompt: string): Promise<string> {
+    if (this.settings.provider === 'openai') {
+      const openai = new OpenAI({
+        apiKey: this.settings.openaiApiKey,
+        baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
+        dangerouslyAllowBrowser: true
+      });
+      const res = await openai.chat.completions.create({
+        model: this.settings.openaiModel || 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3
+      });
+      return res.choices[0].message.content || '';
+    } else {
+      const genAI = new GoogleGenerativeAI(this.settings.geminiApiKey || '');
+      const model = genAI.getGenerativeModel({ model: this.settings.geminiModel || "gemini-1.5-flash" });
+      const res = await model.generateContent(prompt);
+      return res.response.text();
+    }
+  }
 }
+
