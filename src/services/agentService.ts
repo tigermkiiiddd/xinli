@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db, type Message, type MemoryEntry, type AppSettings, type UserProfile, type Chat } from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import Fuse from 'fuse.js';
 
 export interface AgentStep {
   thought: string;
@@ -73,25 +74,31 @@ export class AgentService {
         const queries = (args.queries || [args.query]).map((q: string) => q.toLowerCase());
         const allMemories = await db.memories.toArray();
         
+        if (allMemories.length === 0) return "记忆库目前为空。";
+
+        const fuse = new Fuse(allMemories, {
+          keys: ['content', 'category', 'domain'],
+          threshold: 0.4,
+          distance: 100,
+          includeScore: true
+        });
+
         const resultSet = new Set<string>();
         const finalResults: any[] = [];
 
         for (const q of queries) {
-          const matched = allMemories.filter(m => 
-            !resultSet.has(m.id) && (
-              m.content.toLowerCase().includes(q) || 
-              m.category.toLowerCase().includes(q) ||
-              m.domain.toLowerCase().includes(q)
-            )
-          );
-          matched.forEach(m => {
-            resultSet.add(m.id);
-            finalResults.push(m);
-          });
+          const results = fuse.search(q);
+          for (const r of results) {
+            if (!resultSet.has(r.item.id)) {
+              resultSet.add(r.item.id);
+              finalResults.push(r.item);
+            }
+            if (finalResults.length >= 10) break;
+          }
           if (finalResults.length >= 10) break;
         }
         
-        return finalResults.length > 0 ? JSON.stringify(finalResults.slice(0, 10)) : "未找到相关的记忆。";
+        return finalResults.length > 0 ? JSON.stringify(finalResults.slice(0, 10)) : "未找到相关的模糊匹配记录。";
       } else if (name === 'update_memory') {
         const id = uuidv4();
         await db.memories.put({
@@ -127,15 +134,28 @@ export class AgentService {
         return this.runGemini(history, profileContext, onStep);
       }
     } catch (error: any) {
-      console.error('runChat error:', error);
-      return `系统错误: 无法获取回复。 (${error.message}) 请检查 API Key 配置。`;
+      console.error('runChat detailed error:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        status: error.status,
+        type: error.type
+      });
+      let friendlyMessage = `系统错误: ${error.message || '无法获取回复'}`;
+      if (error.message?.includes('fetch')) friendlyMessage = "网络连接失败，请检查 API 基地址是否可达。";
+      if (error.status === 401) friendlyMessage = "API Key 校验失败，请检查设置。";
+      return friendlyMessage;
     }
   }
 
   private async runOpenAI(history: Message[], profileContext: string, onStep?: AgentCallback): Promise<string> {
+    const rawBaseUrl = this.settings.openaiBaseUrl || 'https://api.openai.com/v1';
+    // Normalize baseURL: strip /chat/completions if the user accidentally included it
+    const baseURL = rawBaseUrl.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+
     const openai = new OpenAI({
       apiKey: this.settings.openaiApiKey,
-      baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
+      baseURL,
       dangerouslyAllowBrowser: true
     });
 
@@ -275,9 +295,12 @@ export class AgentService {
 
   private async callOpenAIOrGeminiSimple(prompt: string): Promise<string> {
     if (this.settings.provider === 'openai') {
+      const rawBaseUrl = this.settings.openaiBaseUrl || 'https://api.openai.com/v1';
+      const baseURL = rawBaseUrl.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+      
       const openai = new OpenAI({
         apiKey: this.settings.openaiApiKey,
-        baseURL: this.settings.openaiBaseUrl || 'https://api.openai.com/v1',
+        baseURL,
         dangerouslyAllowBrowser: true
       });
       const res = await openai.chat.completions.create({
