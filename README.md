@@ -1,20 +1,49 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# MindCare - 心理咨询助手
 
-# Run and deploy your AI Studio app
+MindCare 是一款基于大语言模型（LLM）构建的专业级 AI 心理咨询系统。它采用先进的 Re-Act Agent 架构与 Graph RAG 理念，旨在为用户提供具有深度洞察力、同理心且长效连贯的心理支持体验。
 
-This contains everything you need to run your app locally.
+## ✨ 核心功能 (Features)
 
-View your app in AI Studio: https://ai.studio/apps/6620ac97-6dbe-4758-8038-a2d49b09e2b9
+### 1. 深度心理分析对话
+*   **多模型引擎**：支持接入 OpenAI (GPT-4o) 和 Google Gemini (1.5 Pro) 等顶级模型。
+*   **Agent 思考链**：对话过程中实时展示 AI 的“思考过程”（Agent Steps），通过 Re-Act 模式确模型在输出建议前进行了充分的心理学推理。
+*   **情感解析**：模型能够识别对话中的细腻情感，并在总结中保留用户的心理状态轨迹。
 
-## Run Locally
+### 2. 智能上下文压缩与总结
+*   **80% 触发阈值**：当对话占用的 Token 接近设定上限（默认 256k）的 80% 时，系统会自动触发压缩机制。
+*   **心理分析摘要**：调用专门的 LLM API，从心理分析师的角度对当前阶段的咨询进行复盘。
+*   **零丢失策略**：总结时会严格保留用户提到的关键生活事件、原始消息输入和核心冲突点，确保压缩后的上下文依然具备完整的背景资料。
+*   **自动衔接**：压缩完成后，系统会自动生成一条后续回复，确保咨询节奏不中断。
 
-**Prerequisites:**  Node.js
+### 3. 长短期记忆管理 (Graph RAG 风格)
+*   **深度归档**：支持将对话历史自动整理为结构化的“深度档案”。
+*   **记忆连接**：通过可视化或 Modal 界面管理过去聊天的核心关键词与情感节点。
 
+### 4. 极致个性化定制
+*   **导师系统**：可以自定义导师的名称、性格、专业领域和头像。
+*   **环境定制**：支持上传自定义聊天背景、调整主题色，营造最舒适的咨询环境。
+*   **默认头像恢复**：支持一键恢复用户和导师的初始默认头像。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 5. 隐私与数据安全
+*   **全本地存储**：基于 Dexie.js (IndexedDB) 技术，所有对话记录、设置信息、个人资料和 API Key 均存储在用户的浏览器本地，不上传服务器。
+*   **Provider 配置**：API Key 仅用于调用模型，不进行任何额外的持久化收集。
+
+## 🚀 快速上手 (Quick Start)
+
+1.  **供应商配置**：点击界面侧边栏或顶部的“设置”按钮。
+2.  **填写 API Key**：选择 `OpenAI` 或 `Gemini` 并填入您的 API Key。
+3.  **调整上下文上限**：在供应商设置中设定 `最大上下文长度`（推荐 256,000）。
+4.  **开始对话**：回到主界面，点击“新咨询”开始您的心灵旅程。
+
+## 🛠️ 技术栈 (Tech Stack)
+
+*   **Frontend**: React + TypeScript + Vite
+*   **Styling**: Tailwind CSS + Framer Motion (用于丝滑动画)
+*   **Database**: Dexie.js (IndexedDB)
+*   **LLM SDK**: OpenAI Node SDK & Google Generative AI SDK
+*   **Components**: Lucide React Icons
+
+## 📝 注意事项
+
+*   **非医疗建议**：本应用生成的回复由 AI 提供，旨在提供心理疏导和情感陪伴，不能替代专业的医疗诊断或临床治疗。如遇紧急情况，请务必联系当地的危机干预中心或医疗机构。
+*   **API 消耗**：由于开启了深度分析总结功能，在该功能触发时会额外消耗一次 LLM API 调用费用。
