@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'hover:bg-[#EAE6DD]'
                 }`}
             >
-              <div className="flex items-center gap-3 overflow-hidden">
+              <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 mr-2">
                 <MessageSquare className={`min-w-4 h-4 ${activeChatId === chat.id ? 'text-[#5A5A40]' : 'text-[#8E8B82]'
                   }`} />
                 <span className={`truncate text-sm font-medium ${activeChatId === chat.id ? 'text-[#2D2926]' : 'text-[#2D2926]'} flex items-center gap-1.5`}>
@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {chat.title}
                 </span>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-2 md:gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                 {!chat.isArchived && chat.messages.length > 0 && (
                   <button
                     onClick={async (e) => {
@@ -109,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         setIsLoading(false);
                       }
                     }}
-                    className="text-[#A6A298] hover:text-[#5A5A40] p-1 rounded hover:bg-[#D9D4C7]"
+                    className="text-[#A6A298] hover:text-[#5A5A40] p-2 md:p-1 rounded hover:bg-[#D9D4C7]"
                     title="归档对话"
                   >
                     <Database className="w-4 h-4" />
@@ -117,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
                 <button
                   onClick={(e) => deleteChat(e, chat.id)}
-                  className={`text-[#A6A298] hover:text-red-500 p-1 rounded hover:bg-red-50 ${chats.length === 1 ? 'hidden' : ''
+                  className={`text-[#A6A298] hover:text-red-500 p-2 md:p-1 rounded hover:bg-red-50 ${chats.length === 1 ? 'hidden' : ''
                     }`}
                   title="删除对话"
                 >
