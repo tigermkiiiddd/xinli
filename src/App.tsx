@@ -152,7 +152,7 @@ export default function App() {
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chats, activeChatId]);
+  }, [chats, activeChatId, agentSteps]);
 
   const activeChat = chats.find(c => c.id === activeChatId) || null;
 
@@ -298,7 +298,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F9F8F6] text-[#2D2926] font-sans">
+    <div className="flex h-[100dvh] overflow-hidden bg-[#F9F8F6] text-[#2D2926] font-sans">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
@@ -440,7 +440,7 @@ export default function App() {
         }}
       >
         {/* Header */}
-        <header className="h-16 border-b border-[#F0EDE8] flex items-center px-8 bg-white/80 backdrop-blur-sm shrink-0 z-10 sticky top-0">
+        <header className="h-16 border-b border-[#F0EDE8] flex items-center px-8 bg-white/80 backdrop-blur-sm shrink-0 z-10">
           <button 
             className="md:hidden mr-3 p-2 text-[#8E8B82] hover:text-[#5A5A40] transition-colors"
             onClick={() => setIsSidebarOpen(true)}
@@ -485,7 +485,7 @@ export default function App() {
         </header>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-36">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-8">
           <div className="max-w-3xl mx-auto space-y-6">
             {activeChat?.messages.length === 0 ? (
               <div className="h-full min-h-[50vh] flex flex-col items-center justify-center text-center px-4 fade-in">
@@ -655,8 +655,8 @@ export default function App() {
         </div>
 
         {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4 md:px-6 z-10 pointer-events-none">
-          <div className="max-w-3xl mx-auto pointer-events-auto">
+        <div className="bg-white border-t border-[#F0EDE8] pt-4 pb-6 px-4 md:px-6 z-10">
+          <div className="max-w-3xl mx-auto">
             <form 
               onSubmit={handleSendMessage}
               className="relative flex items-center bg-[#F9F8F6] rounded-2xl border border-[#E5E1D8] focus-within:border-[#5A5A40] transition-colors shadow-sm"
