@@ -9,13 +9,18 @@ export interface UserProfile {
   background_info?: string;
 }
 
-export interface ProviderSettings {
+export interface AppSettings {
   id: number; // Always 1
   provider: 'openai' | 'gemini';
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   openaiModel?: string;
   geminiApiKey?: string;
+  userAvatar?: string;
+  assistantAvatar?: string;
+  chatBackgroundMode?: 'default' | 'color' | 'image';
+  chatBackgroundColor?: string;
+  chatBackgroundImage?: string;
 }
 
 export interface Message {
@@ -36,11 +41,11 @@ export interface Chat {
 export class MindCareDB extends Dexie {
   userProfile!: Table<UserProfile, number>;
   chats!: Table<Chat, string>;
-  settings!: Table<ProviderSettings, number>;
+  settings!: Table<AppSettings, number>;
 
   constructor() {
     super('MindCareDB');
-    this.version(2).stores({
+    this.version(3).stores({
       userProfile: 'id',
       chats: 'id, updatedAt',
       settings: 'id'

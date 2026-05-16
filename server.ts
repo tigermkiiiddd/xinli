@@ -115,7 +115,7 @@ async function startServer() {
         try {
            const sysInstruction = systemMessage.content + emotionContext;
            const chatResponse = await ai.models.generateContent({
-               model: 'gemini-2.5-pro',
+               model: 'gemini-2.5-flash',
                contents: genAiMessages,
                config: {
                    systemInstruction: sysInstruction,
