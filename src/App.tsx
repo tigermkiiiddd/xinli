@@ -8,6 +8,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Chat, type Message, type UserProfile, type AppSettings } from './db';
+import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
 export default function App() {
   const chats = useLiveQuery(() => db.chats.orderBy('updatedAt').reverse().toArray()) || [];
@@ -158,36 +160,132 @@ export default function App() {
         updatedAt: Date.now()
       });
 
-      const apiMessages = messagesToSend.map((m) => ({
-        role: m.role,
-        content: m.content
-      }));
+      const settings = settingsData || { provider: 'openai' } as AppSettings;
+      const provider = settings.provider || 'openai';
+      
+      // 1. Get user profile context
+      let profileContext = "";
+      if (userProfileData && Object.values(userProfileData).filter(Boolean).length > 0) {
+        profileContext = `\n\n【用户个性化档案】
+- 年龄：${userProfileData.age || '未知'}
+- 职业：${userProfileData.occupation || '未知'}
+- 长期情感状态/自评：${userProfileData.emotional_state || '未知'}
+- 辅导目标：${userProfileData.counseling_goals || '未知'}
+- 背景信息：${userProfileData.background_info || '无'}
+请在回应中自然地参考这些信息以提供更个性化的辅导。`;
+      }
 
-      // Pass userProfile to the server
-      const requestBody = {
-        messages: apiMessages,
-        userProfile: userProfileData || {},
-        settings: settingsData || { provider: 'openai' }
-      };
+      // 2. Recognize emotion from the latest user message
+      const latestUserMessage = messagesToSend.filter((m: any) => m.role === 'user').pop()?.content || '';
+      let emotionLabel = '中性 (Neutral)';
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      const baseSystemContent = `你是一位专业、有同理心、经验丰富的心理咨询师。你的目标是提供心理支持、倾听用户的困扰、帮助他们进行情绪调节，并提供温和的建设性建议。
+在与用户交流时，请遵循以下原则：
+1. 始终保持专注、接纳和无条件积极关注。
+2. 避免说教或替用户做直接决定，引导他们自我探索。
+3. 语言需温和、体贴、真诚，使用鼓励性的语言。
+4. 如果评估到用户可能存在严重的精神危机或有自残/自杀倾向，请务必建议他们寻求专业的现场医疗帮助或拨打危机援助热线。`;
 
-      const data = await response.json();
+      let replyContent = '';
+      let effectiveProvider = provider;
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Request failed');
+      // Handle Fallback / Provider selection
+      if (effectiveProvider === 'openai' && !settings.openaiApiKey && settings.geminiApiKey) {
+        effectiveProvider = 'gemini';
+      }
+
+      if (effectiveProvider === 'gemini') {
+        const apiKey = settings.geminiApiKey;
+        if (!apiKey) {
+          throw new Error('未配置 Gemini API Key，请在设置中配置。');
+        }
+        const ai = new GoogleGenAI({ 
+          apiKey,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } 
+        });
+
+        // Emotion recognition logic
+        if (latestUserMessage) {
+          try {
+            const result = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: [{ text: "You are an emotion analyzer. Analyze the user's text and return ONLY one of these labels: '积极 (Positive)', '消极 (Negative) - 悲伤', '消极 (Negative) - 愤怒', '消极 (Negative) - 焦虑', or '中性 (Neutral)'.\n\nUser text: " + latestUserMessage }]
+            });
+            emotionLabel = result.text?.trim() || emotionLabel;
+          } catch (e) {
+            console.error('Gemini emotion recognition failed:', e);
+          }
+        }
+
+        const emotionContext = `\n\n【实时情绪识别】\n目前检测到用户这段话的情感状态为：${emotionLabel}。\n如果用户情绪低落（如悲伤、焦虑、压力大），请表现出更多的同情、耐心 and 理解；如果心情积极，可以更受鼓励并探讨进展，根据情绪动态调整回应语气。`;
+        
+        const genAiMessages = messagesToSend.map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
+
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: genAiMessages,
+          config: {
+            systemInstruction: baseSystemContent + profileContext + emotionContext,
+            temperature: 0.7,
+            maxOutputTokens: 1500
+          }
+        });
+        replyContent = result.text || '';
+
+      } else {
+        const apiKey = settings.openaiApiKey;
+        if (!apiKey) {
+          throw new Error('未配置 OpenAI API Key，请在设置中配置。');
+        }
+        const openai = new OpenAI({
+          apiKey: apiKey,
+          baseURL: settings.openaiBaseUrl || 'https://api.openai.com/v1',
+          dangerouslyAllowBrowser: true
+        });
+
+        // Emotion recognition logic
+        if (latestUserMessage) {
+          try {
+            const resp = await openai.chat.completions.create({
+              model: settings.openaiModel || 'gpt-3.5-turbo',
+              messages: [
+                { role: "system", content: "You are an emotion analyzer. Analyze the user's text and return ONLY one of these labels: '积极 (Positive)', '消极 (Negative) - 悲伤', '消极 (Negative) - 愤怒', '消极 (Negative) - 焦虑', or '中性 (Neutral)'." },
+                { role: "user", content: latestUserMessage }
+              ],
+              temperature: 0,
+              max_tokens: 15,
+            });
+            emotionLabel = resp.choices[0]?.message?.content?.trim() || emotionLabel;
+          } catch (e) {
+            console.error('OpenAI emotion recognition failed:', e);
+          }
+        }
+
+        const emotionContext = `\n\n【实时情绪识别】\n目前检测到用户这段话的情感状态为：${emotionLabel}。\n如果用户情绪低落（如悲伤、焦虑、压力大），请表现出更多的同情、耐心和理解；如果心情积极，可以更受鼓励并探讨进展，根据情绪动态调整回应语气。`;
+        
+        const apiMessages = [
+          { role: 'system', content: baseSystemContent + profileContext + emotionContext },
+          ...messagesToSend.map(m => ({ role: m.role, content: m.content }))
+        ];
+
+        const response = await openai.chat.completions.create({
+          model: settings.openaiModel || 'gpt-3.5-turbo',
+          messages: apiMessages as any,
+          temperature: 0.7,
+          max_tokens: 1500,
+        });
+        replyContent = response.choices[0]?.message?.content || '';
       }
 
       const assistantMessage: Message = {
         id: uuidv4(),
         role: 'assistant',
-        content: data.reply,
+        content: replyContent,
         createdAt: Date.now(),
-        emotion: data.emotion,
+        emotion: emotionLabel,
       };
 
       const freshChat = await db.chats.get(currentChat.id);
@@ -677,7 +775,7 @@ export default function App() {
                     {settingsForm.provider === 'openai' && (
                       <>
                         <div>
-                          <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">OpenAI API Key (留空则使用环境变量的主配置)</label>
+                          <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">OpenAI API Key</label>
                           <input type="password" value={settingsForm.openaiApiKey || ''} onChange={e => setSettingsForm({...settingsForm, openaiApiKey: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
                         </div>
                         <div>
@@ -692,7 +790,7 @@ export default function App() {
                     )}
                     {settingsForm.provider === 'gemini' && (
                       <div>
-                        <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">Gemini API Key (留空则使用环境变量的主配置)</label>
+                        <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">Gemini API Key</label>
                         <input type="password" value={settingsForm.geminiApiKey || ''} onChange={e => setSettingsForm({...settingsForm, geminiApiKey: e.target.value})} className="w-full p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]" />
                       </div>
                     )}
