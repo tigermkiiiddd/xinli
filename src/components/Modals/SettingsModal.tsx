@@ -102,6 +102,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </>
                 )}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#A6A298] uppercase tracking-tighter mb-1.5">
+                    最大上下文长度 (Tokens)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      placeholder="256000"
+                      value={settingsForm.maxContextWindow || 256000}
+                      onChange={e => setSettingsForm({ ...settingsForm, maxContextWindow: parseInt(e.target.value) || 256000 })}
+                      className="flex-1 p-2.5 bg-white border border-[#E5E1D8] rounded-lg text-sm focus:outline-none focus:border-[#5A5A40]"
+                    />
+                    <div className="flex items-center px-3 bg-[#F5F5F0] border border-[#E5E1D8] rounded-lg text-xs text-[#8E8B82] font-medium">
+                      Tokens
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[10px] text-[#A6A298]">上下文接近 80% 时将自动触发压缩总结。</p>
+                </div>
               </>
             ) : (
               <>
@@ -116,24 +134,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <User className="w-8 h-8 text-[#5A5A40]" />
                         )}
                       </div>
-                      <label className="flex-1 cursor-pointer">
-                        <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
-                          点击上传新头像
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => setSettingsForm({ ...settingsForm, userAvatar: ev.target?.result as string });
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
+                      <div className="flex-1 flex flex-col gap-2">
+                        <label className="cursor-pointer">
+                          <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                            点击上传新头像
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => setSettingsForm({ ...settingsForm, userAvatar: ev.target?.result as string });
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        {settingsForm.userAvatar && (
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({ ...settingsForm, userAvatar: undefined })}
+                            className="text-[10px] text-[#A6A298] hover:text-[#5A5A40] transition-colors text-center"
+                          >
+                            恢复默认头像
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -147,24 +176,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span className="text-white font-serif italic text-2xl">心</span>
                         )}
                       </div>
-                      <label className="flex-1 cursor-pointer">
-                        <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
-                          点击上传新头像
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => setSettingsForm({ ...settingsForm, assistantAvatar: ev.target?.result as string });
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
+                      <div className="flex-1 flex flex-col gap-2">
+                        <label className="cursor-pointer">
+                          <div className="px-4 py-2.5 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                            点击上传新头像
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => setSettingsForm({ ...settingsForm, assistantAvatar: ev.target?.result as string });
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        {settingsForm.assistantAvatar && (
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({ ...settingsForm, assistantAvatar: undefined })}
+                            className="text-[10px] text-[#A6A298] hover:text-[#5A5A40] transition-colors text-center"
+                          >
+                            恢复默认头像
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -200,24 +240,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <img src={settingsForm.chatBackgroundImage} className="w-full h-full object-cover" alt="Background preview" />
                           </div>
                         )}
-                        <label className="block cursor-pointer">
-                          <div className="px-4 py-3 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
-                            {settingsForm.chatBackgroundImage ? '更换背景图片' : '上传背景图片'}
+                          <div className="flex flex-col gap-2">
+                            <label className="block cursor-pointer">
+                              <div className="px-4 py-3 bg-white border border-[#E5E1D8] rounded-xl text-sm font-medium text-[#5A5A40] text-center hover:bg-[#F5F5F0] transition-colors">
+                                {settingsForm.chatBackgroundImage ? '更换背景图片' : '上传背景图片'}
+                              </div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => setSettingsForm({ ...settingsForm, chatBackgroundImage: ev.target?.result as string });
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                            {settingsForm.chatBackgroundImage && (
+                              <button
+                                type="button"
+                                onClick={() => setSettingsForm({ ...settingsForm, chatBackgroundImage: undefined })}
+                                className="text-[10px] text-[#A6A298] hover:text-[#5A5A40] transition-colors text-center"
+                              >
+                                恢复默认背景
+                              </button>
+                            )}
                           </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => setSettingsForm({ ...settingsForm, chatBackgroundImage: ev.target?.result as string });
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                          />
-                        </label>
                       </div>
                     </div>
                   )}

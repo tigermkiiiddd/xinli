@@ -1,4 +1,4 @@
-import { db, type Message, type MemoryEntry, type AppSettings, type UserProfile, type Chat } from '../db';
+import { db, type Message, type MemoryEntry, type AppSettings, type UserProfile, type Chat, type TokenUsage } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import Fuse from 'fuse.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -264,7 +264,7 @@ export class AgentService {
     return "未知工具。";
   }
 
-  async runChat(history: Message[], onStep?: AgentCallback): Promise<string> {
+  async runChat(history: Message[], onStep?: AgentCallback): Promise<{ content: string; usage?: TokenUsage }> {
     const mentorName = this.settings.assistantName || "AI 心理咨询师";
     const personality = this.settings.assistantPersonality || "你是一位专业、温柔的心理导师。";
     let systemInstruction = SYSTEM_PROMPT + `\n\n当前名字：${mentorName}\n性格设定：${personality}`;
@@ -296,10 +296,18 @@ export class AgentService {
           tool_choice: 'auto',
         });
 
+        const usage = response.usage ? {
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens
+        } : undefined;
+
         const message = response.choices[0].message;
         currentMessages.push(message);
 
-        if (!message.tool_calls) return message.content || "";
+        if (!message.tool_calls) {
+          return { content: message.content || "", usage };
+        }
 
         for (const toolCall of message.tool_calls) {
           const name = toolCall.function.name;
@@ -331,9 +339,15 @@ export class AgentService {
         const result = await chat.sendMessage(iterations === 0 ? currentHistory[currentHistory.length - 1].content : "继续处理上述工具反馈。");
         const response = await result.response;
         
+        const usage = response.usageMetadata ? {
+          promptTokens: response.usageMetadata.promptTokenCount,
+          completionTokens: response.usageMetadata.candidatesTokenCount,
+          totalTokens: response.usageMetadata.totalTokenCount
+        } : undefined;
+
         const calls = response.functionCalls();
         if (!calls || calls.length === 0) {
-          return response.text();
+          return { content: response.text(), usage };
         }
 
         const toolResponses = [];
@@ -350,22 +364,36 @@ export class AgentService {
         
         const nextResult = await chat.sendMessage(toolResponses as any);
         const nextResponse = await nextResult.response;
+        
+        const nextUsage = nextResponse.usageMetadata ? {
+          promptTokens: nextResponse.usageMetadata.promptTokenCount,
+          completionTokens: nextResponse.usageMetadata.candidatesTokenCount,
+          totalTokens: nextResponse.usageMetadata.totalTokenCount
+        } : undefined;
+
         const nextCalls = nextResponse.functionCalls();
         if (!nextCalls || nextCalls.length === 0) {
-          return nextResponse.text();
+          return { content: nextResponse.text(), usage: nextUsage };
         }
         iterations++;
       }
     }
-    return "思考过深。";
+    return { content: "思考过深。" };
   }
 
   private mapMessagesToGemini(history: Message[]) {
     // History should not include the last message which will be sent via sendMessage
-    return history.slice(0, -1).map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
+    return history.slice(0, -1).map(m => {
+      let role = 'user';
+      if (m.role === 'assistant') role = 'model';
+      // System/Summary messages in history are treated as model outputs (summaries) for Gemini
+      if (m.role === 'system') role = 'user'; // Or maybe 'user' with a directive. Let's use 'user' for safety.
+      
+      return {
+        role,
+        parts: [{ text: m.role === 'system' ? `[系统背景总结]: ${m.content}` : m.content }]
+      };
+    });
   }
 
   async archiveChat(chat: Chat): Promise<void> {
@@ -400,5 +428,41 @@ export class AgentService {
         await db.chats.update(chat.id, { isArchived: true });
       }
     } catch(e) {}
+  }
+
+  async summarizePsychologically(history: Message[]): Promise<string> {
+    const prompt = `你是一位顶级的深度心理分析师。请对以下对话历史进行深度总结。
+要求：
+1. 总结用户的当前心理状态、核心冲突和核心需求。
+2. 详细列出接下来的咨询建议和行动路径。
+3. **重要**：总结时必须要有一个"用户原始消息"区域，罗列出用户的原始输入内容，不得由于压缩而丢失这些关键事实。
+4. 语言风格要专业、严谨、且富有同理心。
+
+对话历史：
+${history.filter(m => !m.isSummary).map(m => `${m.role === 'user' ? '用户' : '咨询师'}: ${m.content}`).join('\n')}
+
+请输出你的深度分析总结。`;
+
+    if (this.settings.provider === 'openai') {
+      const apiKey = this.settings.openaiApiKey || (import.meta as any).env.VITE_OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OpenAI API Key is missing");
+      const openai = new OpenAI({ 
+        apiKey, 
+        dangerouslyAllowBrowser: true,
+        baseURL: this.settings.openaiBaseUrl ? this.settings.openaiBaseUrl.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '') : 'https://api.openai.com/v1',
+      });
+      const res = await openai.chat.completions.create({
+        model: this.settings.openaiModel || 'gpt-4o',
+        messages: [{ role: 'system', content: "你是一位精通拉康、佛洛依德及现代认知疗法的深度心理分析师。" }, { role: 'user', content: prompt }]
+      });
+      return res.choices[0].message.content || "无法生成总结。";
+    } else {
+      const apiKey = this.settings.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("Gemini API Key is missing");
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    }
   }
 }

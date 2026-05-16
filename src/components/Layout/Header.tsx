@@ -17,6 +17,10 @@ export const Header: React.FC<HeaderProps> = ({
   activeChat,
   onArchiveClick
 }) => {
+  const lastUsage = activeChat?.messages
+    ?.filter(m => m.role === 'assistant' && m.usage)
+    .slice(-1)[0]?.usage;
+
   return (
     <header className="h-16 border-b border-[#F0EDE8] flex items-center px-8 bg-white/80 backdrop-blur-sm shrink-0 z-10">
       <button
@@ -44,15 +48,24 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {activeChat && !activeChat.isArchived && activeChat.messages.length > 0 && (
-        <button
-          onClick={onArchiveClick}
-          className="flex items-center gap-2 px-3 py-1.5 bg-[#F5F5F0] hover:bg-[#EAE6DD] text-[#5A5A40] rounded-xl text-xs font-semibold transition-all border border-[#E5E1D8]"
-        >
-          <Database className="w-3.5 h-3.5" />
-          <span>手动归档</span>
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        {lastUsage && !activeChat?.isArchived && (
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF9F6] border border-[#F0EDE8] rounded-full text-[10px] text-[#A6A298] mr-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+            <span>上下文: {lastUsage.promptTokens}</span>
+          </div>
+        )}
+
+        {activeChat && !activeChat.isArchived && activeChat.messages.length > 0 && (
+          <button
+            onClick={onArchiveClick}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#F5F5F0] hover:bg-[#EAE6DD] text-[#5A5A40] rounded-xl text-xs font-semibold transition-all border border-[#E5E1D8]"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">手动归档</span>
+          </button>
+        )}
+      </div>
     </header>
   );
 };

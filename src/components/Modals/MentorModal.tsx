@@ -37,26 +37,41 @@ export const MentorModal: React.FC<MentorModalProps> = ({
                     <span className="text-white font-serif italic text-4xl">{settingsForm.assistantName?.charAt(0) || '心'}</span>
                   )}
                 </div>
-                <label className="absolute -bottom-2 -right-2 bg-white p-2 rounded-full shadow-lg border border-[#E5E1D8] cursor-pointer hover:bg-[#F5F5F0] transition-colors">
-                  <Edit2 className="w-4 h-4 text-[#5A5A40]" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const newAvatar = ev.target?.result as string;
-                          setSettingsForm({ ...settingsForm, assistantAvatar: newAvatar });
-                          db.settings.update(1, { assistantAvatar: newAvatar });
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                </label>
+                <div className="absolute -bottom-2 -right-2 flex flex-col items-center gap-1">
+                  <label className="bg-white p-2 rounded-full shadow-lg border border-[#E5E1D8] cursor-pointer hover:bg-[#F5F5F0] transition-colors" title="更改头像">
+                    <Edit2 className="w-4 h-4 text-[#5A5A40]" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const newAvatar = ev.target?.result as string;
+                            setSettingsForm({ ...settingsForm, assistantAvatar: newAvatar });
+                            db.settings.update(1, { assistantAvatar: newAvatar });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  {settingsForm.assistantAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSettingsForm({ ...settingsForm, assistantAvatar: undefined });
+                        db.settings.update(1, { assistantAvatar: undefined });
+                      }}
+                      className="bg-white p-1 rounded-full shadow-md border border-[#E5E1D8] text-[8px] text-[#A6A298] hover:text-[#5A5A40] hover:bg-[#F5F5F0] transition-colors"
+                      title="恢复默认"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-[10px] text-[#A6A298] uppercase tracking-widest font-bold">点击图标更换导师头像</p>
             </div>

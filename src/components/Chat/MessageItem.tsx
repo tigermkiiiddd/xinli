@@ -30,6 +30,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onRegenerate,
   onAvatarClick
 }) => {
+  if (message.role === 'system') {
+    return (
+      <div className="flex justify-center my-6 w-full fade-in">
+        <div className="max-w-[85%] bg-[#F5F5F0]/80 backdrop-blur-sm border border-[#E5E1D8] rounded-2xl px-6 py-4 text-center">
+          <div className="markdown-body text-[#4A463F] text-sm leading-relaxed text-left">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+          <div className="mt-2 text-[10px] text-[#A6A298] font-mono tracking-wider uppercase">系统自动压缩反馈</div>
+        </div>
+      </div>
+    );
+  }
+
   const isEditing = editingMessageId === message.id && message.role === 'user';
 
   return (
@@ -107,29 +120,36 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             )}
           </div>
 
-          {/* Action buttons */}
-          {message.role === 'user' && !isLoading && (
-            <div className="flex mt-1 mr-1">
-              <button
-                onClick={() => onEdit(message.id, message.content)}
-                className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-2 md:p-1 text-[#A6A298] hover:text-[#5A5A40]"
-                title="编辑"
-              >
-                <Edit2 className="w-4 h-4 md:w-3.5 md:h-3.5" />
-              </button>
+          {/* Action buttons & Info */}
+          <div className="flex flex-col gap-1 w-full" style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div className="flex mt-1 gap-1">
+              {message.role === 'user' && !isLoading && (
+                <button
+                  onClick={() => onEdit(message.id, message.content)}
+                  className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-2 md:p-1 text-[#A6A298] hover:text-[#5A5A40]"
+                  title="编辑"
+                >
+                  <Edit2 className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                </button>
+              )}
+              {message.role === 'assistant' && !isLoading && (
+                <button
+                  onClick={() => onRegenerate(message.id)}
+                  className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-2 md:p-1 text-[#A6A298] hover:text-[#5A5A40]"
+                  title="重新生成"
+                >
+                  <RefreshCcw className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                </button>
+              )}
             </div>
-          )}
-          {message.role === 'assistant' && !isLoading && (
-            <div className="flex mt-1 ml-1">
-              <button
-                onClick={() => onRegenerate(message.id)}
-                className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-2 md:p-1 text-[#A6A298] hover:text-[#5A5A40]"
-                title="重新生成"
-              >
-                <RefreshCcw className="w-4 h-4 md:w-3.5 md:h-3.5" />
-              </button>
-            </div>
-          )}
+
+            {message.role === 'assistant' && message.usage && (
+              <div className="text-[10px] text-[#A6A298] ml-1 bg-white/50 px-2 py-0.5 rounded-full border border-[#E5E1D8]/50 flex gap-2 w-max">
+                <span className="font-medium">Context Token: {message.usage.promptTokens}</span>
+                <span className="opacity-60">| 生成: {message.usage.completionTokens} | 总计: {message.usage.totalTokens}</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

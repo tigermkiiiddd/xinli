@@ -42,6 +42,7 @@ export default function App() {
     openaiBaseUrl: '',
     openaiModel: '',
     geminiApiKey: '',
+    maxContextWindow: 256000,
     chatBackgroundMode: 'default',
     chatBackgroundColor: '#f9f8f6',
     chatBackgroundImage: '',
@@ -160,17 +161,56 @@ export default function App() {
     setAgentSteps([]);
 
     try {
-      await db.chats.put({
-        ...currentChat,
-        title: titleToUpdate,
-        messages: messagesToSend,
-        updatedAt: Date.now()
-      });
-
       const settings = settingsData || { provider: 'openai' } as AppSettings;
-      const agent = new AgentService(settings, userProfileData);
+      const maxContext = settings.maxContextWindow || 256000;
+      
+      // Calculate current context tokens
+      // We look at the last assistant message's usage to get the total tokens of the previous turn
+      const lastAssistantMsg = [...messagesToSend].reverse().find(m => m.role === 'assistant' && m.usage);
+      const currentTokenCount = lastAssistantMsg?.usage?.totalTokens || 0;
+      
+      let finalMessagesToSend = [...messagesToSend];
 
-      const replyContent = await agent.runChat(messagesToSend, (step) => {
+      if (currentTokenCount > maxContext * 0.8 && messagesToSend.length > 5) {
+        // Trigger compression
+        const agent = new AgentService(settings, userProfileData);
+        setAgentSteps([{ thought: '上下文即将达到上限 (80%)，正在启动深度分析与心理状态压缩...', action: 'Summarize' }]);
+        
+        const summary = await agent.summarizePsychologically(messagesToSend);
+        
+        const summaryMessage: Message = {
+          id: uuidv4(),
+          role: 'system',
+          content: `🔄 **已完成上下文压缩**\n\n心理分析摘要：\n${summary}`,
+          createdAt: Date.now(),
+          isSummary: true
+        };
+
+        // Keeps the last user message and the summary
+        const lastUserMessage = messagesToSend[messagesToSend.length - 1];
+        finalMessagesToSend = [summaryMessage, lastUserMessage];
+        
+        // Update DB with the compression feedback
+        const freshChat = await db.chats.get(currentChat.id);
+        if (freshChat) {
+          await db.chats.put({
+            ...freshChat,
+            title: titleToUpdate,
+            messages: [...freshChat.messages, summaryMessage],
+            updatedAt: Date.now()
+          });
+        }
+      } else {
+        await db.chats.put({
+          ...currentChat,
+          title: titleToUpdate,
+          messages: messagesToSend,
+          updatedAt: Date.now()
+        });
+      }
+
+      const agent = new AgentService(settings, userProfileData);
+      const { content: replyContent, usage } = await agent.runChat(finalMessagesToSend, (step) => {
         setAgentSteps(prev => [...prev, step]);
       });
 
@@ -179,6 +219,7 @@ export default function App() {
         role: 'assistant',
         content: replyContent,
         createdAt: Date.now(),
+        usage: usage
       };
 
       const freshChat = await db.chats.get(currentChat.id);

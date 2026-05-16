@@ -18,6 +18,7 @@ export interface AppSettings {
   openaiModel?: string;
   geminiApiKey?: string;
   geminiModel?: string;
+  maxContextWindow?: number; // In tokens
   userAvatar?: string;
   assistantAvatar?: string;
   assistantName?: string;
@@ -27,12 +28,20 @@ export interface AppSettings {
   chatBackgroundImage?: string;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
   emotion?: string;
+  usage?: TokenUsage;
+  isSummary?: boolean;
 }
 
 export interface MemoryConnection {
