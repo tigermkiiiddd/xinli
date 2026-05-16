@@ -270,6 +270,7 @@ export class AgentService {
     let systemInstruction = SYSTEM_PROMPT + `\n\n当前名字：${mentorName}\n性格设定：${personality}`;
     if (this.profile) systemInstruction += `\n用户档案：${JSON.stringify(this.profile)}`;
 
+    let currentHistory = [...history];
     let iterations = 0;
     
     if (this.settings.provider === 'openai') {
@@ -279,12 +280,12 @@ export class AgentService {
       const openai = new OpenAI({
         apiKey: apiKey,
         baseURL: this.settings.openaiBaseUrl ? this.settings.openaiBaseUrl.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '') : 'https://api.openai.com/v1',
-        dangerouslyAllowBrowser: true // Essential for client-side
+        dangerouslyAllowBrowser: true
       });
 
       let currentMessages: any[] = [
         { role: 'system', content: systemInstruction },
-        ...history.map(m => ({ role: m.role, content: m.content }))
+        ...currentHistory.map(m => ({ role: m.role, content: m.content }))
       ];
 
       while (iterations < 5) {
@@ -312,7 +313,7 @@ export class AgentService {
       }
     } else {
       // Gemini
-      const apiKey = this.settings.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiKey = this.settings.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY;
       if (!apiKey) throw new Error("Gemini API Key is missing");
 
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -322,13 +323,12 @@ export class AgentService {
       });
 
       const chat = model.startChat({
-        history: this.mapMessagesToGemini(history),
+        history: this.mapMessagesToGemini(currentHistory),
         tools: [{ functionDeclarations: TOOLS_SCHEMA }] as any
       });
 
-      let lastResponse = "";
       while (iterations < 5) {
-        const result = await chat.sendMessage(iterations === 0 ? history[history.length - 1].content : "继续处理上述工具反馈。");
+        const result = await chat.sendMessage(iterations === 0 ? currentHistory[currentHistory.length - 1].content : "继续处理上述工具反馈。");
         const response = await result.response;
         
         const calls = response.functionCalls();
@@ -348,15 +348,12 @@ export class AgentService {
           });
         }
         
-        // In Gemini Chat API, sending back function responses is handled by another sendMessage or similar
-        // For simple loops with startChat:
         const nextResult = await chat.sendMessage(toolResponses as any);
         const nextResponse = await nextResult.response;
         const nextCalls = nextResponse.functionCalls();
         if (!nextCalls || nextCalls.length === 0) {
           return nextResponse.text();
         }
-        // If it still wants tools, the loop continues
         iterations++;
       }
     }
@@ -377,6 +374,7 @@ export class AgentService {
     let text = "";
     if (this.settings.provider === 'openai') {
       const apiKey = this.settings.openaiApiKey || (import.meta as any).env.VITE_OPENAI_API_KEY;
+      if (!apiKey) return;
       const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
       const res = await openai.chat.completions.create({
         model: this.settings.openaiModel || 'gpt-3.5-turbo',
@@ -384,7 +382,8 @@ export class AgentService {
       });
       text = res.choices[0].message.content || "";
     } else {
-      const apiKey = this.settings.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiKey = this.settings.geminiApiKey || (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY;
+      if (!apiKey) return;
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction: "你是一个专业的总结者，输出严格的JSON数组格式。" });
       const result = await model.generateContent(prompt);
