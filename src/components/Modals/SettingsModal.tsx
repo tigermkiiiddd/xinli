@@ -1,14 +1,16 @@
 import React from 'react';
 import { X, User } from 'lucide-react';
 import { db, type AppSettings } from '../../db';
+import { DataBackupPanel } from '../Settings/DataBackupPanel';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settingsForm: AppSettings;
   setSettingsForm: React.Dispatch<React.SetStateAction<AppSettings>>;
-  activeSettingsTab: 'api' | 'ui';
-  setActiveSettingsTab: React.Dispatch<React.SetStateAction<'api' | 'ui'>>;
+  activeSettingsTab: 'api' | 'ui' | 'data';
+  setActiveSettingsTab: React.Dispatch<React.SetStateAction<'api' | 'ui' | 'data'>>;
+  onDataRestored: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -17,7 +19,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settingsForm,
   setSettingsForm,
   activeSettingsTab,
-  setActiveSettingsTab
+  setActiveSettingsTab,
+  onDataRestored
 }) => {
   if (!isOpen) return null;
 
@@ -56,6 +59,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className={`px-3 py-1.5 rounded-lg transition-colors ${activeSettingsTab === 'ui' ? 'bg-[#5A5A40] text-white' : 'text-[#8E8B82] hover:bg-[#F5F5F0]'}`}
             >
               界面外观
+            </button>
+            <button
+              onClick={() => setActiveSettingsTab('data')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${activeSettingsTab === 'data' ? 'bg-[#5A5A40] text-white' : 'text-[#8E8B82] hover:bg-[#F5F5F0]'}`}
+            >
+              数据管理
             </button>
           </div>
         </div>
@@ -121,7 +130,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="mt-1 text-[10px] text-[#A6A298]">上下文接近 80% 时将自动触发压缩总结。</p>
                 </div>
               </>
-            ) : (
+            ) : activeSettingsTab === 'ui' ? (
               <>
                 <div className="space-y-4">
                   <div>
@@ -274,16 +283,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
               </>
+            ) : (
+              <DataBackupPanel onImportComplete={onDataRestored} />
             )}
           </form>
         </div>
         <div className="p-5 bg-white border-t border-[#E5E1D8] flex justify-end gap-3">
           <button type="button" onClick={onClose} className="px-5 py-2 text-[#5A5A40] hover:bg-[#F5F5F0] rounded-xl text-sm font-medium transition-colors">
-            取消
+            {activeSettingsTab === 'data' ? '关闭' : '取消'}
           </button>
-          <button type="submit" form="settings-form" className="px-5 py-2 bg-[#5A5A40] text-white rounded-xl text-sm font-medium hover:bg-[#4A4A35] transition-colors">
-            保存设置
-          </button>
+          {activeSettingsTab !== 'data' && (
+            <button type="submit" form="settings-form" className="px-5 py-2 bg-[#5A5A40] text-white rounded-xl text-sm font-medium hover:bg-[#4A4A35] transition-colors">
+              保存设置
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -30,7 +30,7 @@ export default function App() {
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'api' | 'ui'>('api');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'api' | 'ui' | 'data'>('api');
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [memorySearchTerm, setMemorySearchTerm] = useState('');
 
@@ -60,6 +60,11 @@ export default function App() {
     background_info: ''
   });
   
+  const handleDataRestored = async () => {
+    const restoredChats = await db.chats.orderBy('updatedAt').reverse().toArray();
+    setActiveChatId(restoredChats[0]?.id ?? null);
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-archiving logic
@@ -402,6 +407,7 @@ export default function App() {
         setSettingsForm={setSettingsForm}
         activeSettingsTab={activeSettingsTab}
         setActiveSettingsTab={setActiveSettingsTab}
+        onDataRestored={handleDataRestored}
       />
 
       <MemoryModal

@@ -67,6 +67,8 @@ export interface Chat {
   isArchived?: boolean;
 }
 
+export const DB_SCHEMA_VERSION = 4;
+
 export class MindCareDB extends Dexie {
   userProfile!: Table<UserProfile, number>;
   chats!: Table<Chat, string>;
@@ -75,7 +77,7 @@ export class MindCareDB extends Dexie {
 
   constructor() {
     super('MindCareDB');
-    this.version(4).stores({
+    this.version(DB_SCHEMA_VERSION).stores({
       userProfile: 'id',
       chats: 'id, updatedAt, isArchived',
       settings: 'id',
