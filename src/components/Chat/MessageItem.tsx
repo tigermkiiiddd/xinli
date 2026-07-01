@@ -44,38 +44,46 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   }
 
   const isEditing = editingMessageId === message.id && message.role === 'user';
+  const isUser = message.role === 'user';
+
+  const avatarNode = isUser ? (
+    settingsForm.userAvatar ? (
+      <img src={settingsForm.userAvatar} alt="User" className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex-shrink-0 object-cover shadow-sm" />
+    ) : (
+      <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-[#D9D4C7] flex-shrink-0 flex items-center justify-center text-[#5A5A40] font-bold shadow-sm text-sm">
+        用
+      </div>
+    )
+  ) : (
+    <button
+      onClick={onAvatarClick}
+      className="flex-shrink-0 transition-transform active:scale-95"
+      title="点击编辑导师信息"
+    >
+      {settingsForm.assistantAvatar ? (
+        <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-8 h-8 md:w-9 md:h-9 rounded-xl object-cover shadow-sm border border-transparent hover:border-[#5A5A40]" />
+      ) : (
+        <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic shadow-sm hover:bg-[#4A4A35] text-sm">
+          {settingsForm.assistantName?.charAt(0) || '心'}
+        </div>
+      )}
+    </button>
+  );
 
   return (
     <div
-      className={`flex gap-4 fade-in group ${message.role === 'user' ? 'flex-row-reverse ml-auto max-w-[80%]' : 'max-w-[80%]'}`}
+      className={`fade-in group w-full flex flex-col md:gap-4 ${
+        isUser
+          ? 'md:flex-row-reverse md:ml-auto md:max-w-[80%]'
+          : 'md:flex-row md:max-w-[80%]'
+      }`}
     >
-      {message.role === 'assistant' && (
-        <button
-          onClick={onAvatarClick}
-          className="flex-shrink-0 transition-transform active:scale-95"
-          title="点击编辑导师信息"
-        >
-          {settingsForm.assistantAvatar ? (
-            <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-9 h-9 rounded-xl object-cover mt-1 shadow-sm border border-transparent hover:border-[#5A5A40]" />
-          ) : (
-            <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic shadow-sm mt-1 hover:bg-[#4A4A35]">
-              {settingsForm.assistantName?.charAt(0) || '心'}
-            </div>
-          )}
-        </button>
-      )}
-      {message.role === 'user' && (
-        settingsForm.userAvatar ? (
-          <img src={settingsForm.userAvatar} alt="User" className="w-9 h-9 rounded-xl flex-shrink-0 object-cover mt-1 shadow-sm" />
-        ) : (
-          <div className="w-9 h-9 rounded-xl bg-[#D9D4C7] flex-shrink-0 flex items-center justify-center text-[#5A5A40] font-bold shadow-sm mt-1">
-            用
-          </div>
-        )
-      )}
+      <div className={`flex flex-shrink-0 mb-1.5 md:mb-0 md:mt-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        {avatarNode}
+      </div>
 
       {isEditing ? (
-        <div className="flex-1 w-full flex flex-col gap-2 relative mt-1">
+        <div className={`w-full max-md:w-[calc(100%-1.25rem)] md:flex-1 flex flex-col gap-2 relative md:max-w-none ${isUser ? 'max-md:ml-auto' : ''}`}>
           <textarea
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
@@ -97,11 +105,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-start min-w-0" style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
-          <div className={`rounded-2xl p-4 shadow-sm border ${message.role === 'user'
-              ? 'bg-white border-[#E5E1D8] text-[#2D2926] rounded-tr-none'
-              : 'bg-[#F5F5F0] border-[#E5E1D8] text-[#4A463F] rounded-tl-none'
-            }`}>
+        <div
+          className={`flex flex-col min-w-0 w-full max-md:w-[calc(100%-1.25rem)] md:flex-1 ${
+            isUser ? 'items-end max-md:ml-auto md:items-end' : 'items-start md:items-start'
+          }`}
+        >
+          <div
+            className={`w-full p-3.5 md:p-4 shadow-sm border rounded-2xl ${
+              isUser
+                ? 'bg-white border-[#E5E1D8] text-[#2D2926] rounded-tr-none'
+                : 'bg-[#F5F5F0] border-[#E5E1D8] text-[#4A463F] rounded-tl-none'
+            }`}
+          >
             {message.role === 'assistant' ? (
               <div className="flex flex-col gap-2">
                 {message.emotion && !message.emotion.includes('未识别') && !message.emotion.includes('中性') && (
@@ -121,7 +136,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
 
           {/* Action buttons & Info */}
-          <div className="flex flex-col gap-1 w-full" style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
+          <div className={`flex flex-col gap-1 w-full ${isUser ? 'items-end' : 'items-start'}`}>
             <div className="flex mt-1 gap-1">
               {message.role === 'user' && !isLoading && (
                 <button

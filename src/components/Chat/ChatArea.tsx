@@ -38,8 +38,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onMentorModalOpen
 }) => {
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-8">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto px-3 py-4 md:p-6 custom-scrollbar pb-8">
+      <div className="max-w-3xl mx-auto space-y-4 md:space-y-6">
         {activeChat?.messages.length === 0 ? (
           <div className="h-full min-h-[50vh] flex flex-col items-center justify-center text-center px-4 fade-in">
             <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center mb-6 shadow-sm border border-[#E5E1D8]">
@@ -81,18 +81,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
 
         {isLoading && (
-          <div className="flex flex-col gap-4 fade-in max-w-[80%]">
-            <div className="flex gap-4">
-              <button onClick={onMentorModalOpen} className="flex-shrink-0">
+          <div className="flex flex-col gap-4 fade-in w-full md:max-w-[80%]">
+            <div className="flex flex-col md:flex-row md:gap-4">
+              <button onClick={onMentorModalOpen} className="flex-shrink-0 flex justify-start mb-1.5 md:mb-0 md:mt-1">
                 {settingsForm.assistantAvatar ? (
-                  <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-9 h-9 rounded-xl object-cover mt-1 shadow-sm" />
+                  <img src={settingsForm.assistantAvatar} alt="Assistant" className="w-8 h-8 md:w-9 md:h-9 rounded-xl object-cover shadow-sm" />
                 ) : (
-                  <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic mt-1 shadow-sm px-2">
+                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif italic shadow-sm px-2 text-sm">
                     {settingsForm.assistantName?.charAt(0) || '心'}
                   </div>
                 )}
               </button>
-              <div className="bg-[#F5F5F0] border border-[#E5E1D8] rounded-2xl p-4 rounded-tl-none shadow-sm flex items-center gap-1.5 h-12">
+              <div className="w-full max-md:w-[calc(100%-1.25rem)] md:w-auto bg-[#F5F5F0] border border-[#E5E1D8] rounded-2xl rounded-tl-none p-3.5 md:p-4 shadow-sm flex items-center gap-1.5 h-12">
                 <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                 <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                 <div className="w-1.5 h-1.5 bg-[#8E8B82] rounded-full animate-bounce"></div>
@@ -100,7 +100,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
 
             {agentSteps.length > 0 && (
-              <div className="ml-12 p-3 bg-white/50 border border-dashed border-[#E5E1D8] rounded-xl text-[11px] space-y-2">
+              <div className="md:ml-12 p-3 bg-white/50 border border-dashed border-[#E5E1D8] rounded-xl text-[11px] space-y-2">
                 <div className="flex items-center gap-2 text-[#A6A298] font-bold uppercase tracking-tight">
                   <Database className="w-3 h-3" /> Agent 思考步骤
                 </div>
